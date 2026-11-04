@@ -1,0 +1,45 @@
+# 비밀 값: 절대 커밋하지 않기
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.jks
+
+# 큰 원본 데이터는 각자 내려받기 (data/README.md)
+data/raw/
+
+# OS·편집기
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+# Node (프론트)
+node_modules/
+dist/
+build/
+.next/
+.vite/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python (AI·데이터)
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# Java·Gradle·Maven (백엔드)
+.gradle/
+out/
+target/
+*.class
+
+# 로그
+logs/
+*.log
