@@ -58,7 +58,9 @@ cd backend
 
 - **주소**: 컨트롤러에는 명세처럼 `@GetMapping("/dongs")`만 써요. 앞에 `/api/v1`이 자동으로 붙어요(`WebConfig`).
 - **오류**: `throw new ApiException(ErrorCode.ALREADY_REQUESTED)`처럼 던지면 `{ "code", "message" }`로 바뀌어요. 새 코드가 필요하면 `ErrorCode`와 노션 명세를 같이 고쳐요.
-- **로그인 없이 여는 API**: `SecurityConfig`의 `PUBLIC_PATHS`에 더해요. 지금은 `/health`, `/auth/**`, Swagger만 열려 있고 나머지는 401이에요. 토큰 확인 필터는 로그인 담당이 `auth`에 만들어요. 서버 시작 로그의 `Using generated security password`는 그 필터를 붙이면 사라지니 지금은 무시해요.
+- **로그인 없이 여는 API**: `SecurityConfig`의 `PUBLIC_PATHS`에 더해요. 지금은 `/health`, `/auth/**`, Swagger만 열려 있고 나머지는 토큰이 없거나 틀리면 401이에요. `/auth/**`와 `/health`에서는 토큰을 아예 안 봐요(`JwtConfig`).
+- **내 계정 꺼내기**: 컨트롤러에서 `@AuthenticationPrincipal Jwt jwt`로 받고, 서비스에서 `CurrentUser`를 써요. `currentUser.get(jwt)`는 계정(`AppUser`), `currentUser.require(jwt, Role.OWNER)`는 역할이 다르면 403, `CurrentUser.userId(jwt)`는 DB를 안 읽고 id만 줘요.
+- **Swagger에서 로그인한 채로 불러 보기**: `POST /api/v1/auth/guest`(또는 `/auth/demo`)로 받은 `accessToken`을 오른쪽 위 Authorize에 넣어요.
 - **테이블 바꾸기**: main에 합친 마이그레이션 파일은 고치지 않아요. `V3__add_xxx.sql`처럼 다음 번호로 새 파일을 더해요. 브랜치끼리 번호가 겹치면 나중에 합치는 쪽이 번호를 바꿔요.
 - **엔티티**: `ddl-auto: validate`라서 엔티티와 테이블이 다르면 서버가 안 떠요. 오류 메시지에 어느 칼럼이 다른지 나와요.
 - **응답**: 엔티티를 그대로 내보내지 말고 DTO(`record`)로 만들어요. `open-in-view`를 꺼 둬서 서비스 밖에서는 지연 로딩이 안 돼요.
@@ -85,6 +87,10 @@ cd backend
 | `DEMO_LOGIN_ENABLED` | 시연용 로그인 켜기 | true |
 | `KAKAO_REST_API_KEY`, `KAKAO_REDIRECT_URI` | 카카오 로그인 | 없음 |
 | `AI_API_KEY` | AI 키 | 없음 |
+| `JWT_SECRET` | 토큰(JWT) 도장 키. base64, 32바이트 이상 | 없음(비우면 서버가 켜질 때마다 임시 키) |
 
 - `bootRun`은 Docker의 MySQL 접속 정보를 먼저 써요. 배포 DB에 붙여 보려면 `SPRING_DOCKER_COMPOSE_ENABLED=false`를 함께 줘요.
 - 배포할 때는 `./gradlew bootJar`로 만든 `build/libs/local-demand-map-0.0.1-SNAPSHOT.jar`를 `java -jar`로 실행하고, 위 값을 서버 환경변수로 넣어요.
+- `JWT_SECRET`을 비워 두면 서버를 다시 켤 때마다 키가 바뀌어 전에 받은 토큰이 무효가 돼요(로컬은 `/auth/guest`로 다시 받으면 돼요). 내 컴퓨터에서도 유지하고 싶거나 배포할 때는 키를 만들어 `.env`나 서버 환경변수에 넣어요. 키는 각자 만들고, 단톡방·커밋·캡처에 올리지 않아요.
+  - Windows PowerShell: `$b = New-Object byte[] 32; [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); [Convert]::ToBase64String($b)`
+  - macOS·Linux: `openssl rand -base64 32`
