@@ -16,6 +16,8 @@ import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
 
 /**
  * 입장권(JWT) 도장 키와, 입장권을 만들고(encoder) 검사하는(decoder) 도구.
@@ -56,5 +58,21 @@ public class JwtConfig {
     @Bean
     JwtDecoder jwtDecoder(SecretKey jwtSecretKey) {
         return NimbusJwtDecoder.withSecretKey(jwtSecretKey).macAlgorithm(MacAlgorithm.HS256).build();
+    }
+
+    /**
+     * 요청에서 토큰을 꺼내는 규칙. 로그인 없이 쓰는 주소(/auth/**, /health)에서는 토큰을 아예 안 봐요.
+     * 그래야 만료된 토큰이 붙어 와도 /auth/guest 로 새 토큰을 받을 수 있어요.
+     */
+    @Bean
+    BearerTokenResolver bearerTokenResolver() {
+        DefaultBearerTokenResolver resolver = new DefaultBearerTokenResolver();
+        return request -> {
+            String path = request.getRequestURI().substring(request.getContextPath().length());
+            if (path.startsWith("/api/v1/auth/") || path.equals("/api/v1/health")) {
+                return null;
+            }
+            return resolver.resolve(request);
+        };
     }
 }

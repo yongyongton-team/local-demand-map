@@ -3,6 +3,7 @@ package com.yongyongton.localdemand.auth;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.nullValue;
 import static org.hamcrest.Matchers.startsWith;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -87,6 +88,34 @@ class AuthApiTest {
         mockMvc.perform(post("/api/v1/auth/demo").contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+    }
+
+    @Test
+    @DisplayName("토큰 확인: 진짜 토큰은 통과(없는 주소라 404), 가짜 토큰·토큰 없음은 401")
+    void tokenFilter() throws Exception {
+        String token = token(mockMvc.perform(post("/api/v1/auth/guest")).andReturn());
+
+        mockMvc.perform(get("/api/v1/nothing-here").header("Authorization", "Bearer " + token))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(get("/api/v1/nothing-here").header("Authorization", "Bearer not-a-real-token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        mockMvc.perform(get("/api/v1/nothing-here"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    @DisplayName("토큰 확인: 망가진 토큰이 붙어 와도 /auth/guest 는 새 토큰을 줘요")
+    void guestIgnoresOldToken() throws Exception {
+        mockMvc.perform(post("/api/v1/auth/guest").header("Authorization", "Bearer expired-or-broken"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.accessToken").exists());
+    }
+
+    private String token(MvcResult result) throws Exception {
+        return objectMapper.readTree(result.getResponse().getContentAsString(StandardCharsets.UTF_8))
+                .get("accessToken").asString();
     }
 
     private long userId(MvcResult result) throws Exception {

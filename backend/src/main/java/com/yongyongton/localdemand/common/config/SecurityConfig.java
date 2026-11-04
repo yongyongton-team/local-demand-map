@@ -10,6 +10,7 @@ import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -17,7 +18,8 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 /**
  * 로그인 없이 열어 둘 주소와 CORS 설정.
- * 토큰(JWT) 확인 필터는 아직 없어요. 로그인 담당이 auth 패키지에 만들어 여기에 붙여요.
+ * 토큰(JWT) 확인은 Spring Security의 oauth2ResourceServer 가 해요. 도장 키와 검사 도구는 auth.JwtConfig 에 있어요.
+ * 컨트롤러에서 내 계정 id가 필요하면 @AuthenticationPrincipal Jwt jwt 로 받아 jwt.getSubject() 를 써요.
  */
 @Configuration
 public class SecurityConfig {
@@ -34,7 +36,8 @@ public class SecurityConfig {
     };
 
     @Bean
-    SecurityFilterChain securityFilterChain(HttpSecurity http, JsonSecurityErrorHandler errorHandler) throws Exception {
+    SecurityFilterChain securityFilterChain(HttpSecurity http, JsonSecurityErrorHandler errorHandler,
+                                            BearerTokenResolver bearerTokenResolver) throws Exception {
         http
                 // 쿠키가 아니라 Authorization 헤더로 토큰을 보내서 CSRF 보호는 끄고, 세션도 만들지 않아요.
                 .csrf(AbstractHttpConfigurer::disable)
@@ -46,6 +49,12 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(PUBLIC_PATHS).permitAll()
                         .anyRequest().authenticated())
+                // Authorization: Bearer <토큰> 을 검사해요. 없거나 틀리면 401, 역할이 안 맞으면 403 (공통 오류 모양)
+                .oauth2ResourceServer(resourceServer -> resourceServer
+                        .bearerTokenResolver(bearerTokenResolver)
+                        .jwt(Customizer.withDefaults())
+                        .authenticationEntryPoint(errorHandler)
+                        .accessDeniedHandler(errorHandler))
                 .exceptionHandling(handling -> handling
                         .authenticationEntryPoint(errorHandler)
                         .accessDeniedHandler(errorHandler));
