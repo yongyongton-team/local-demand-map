@@ -1,0 +1,39 @@
+# 값은 환경변수(또는 레포 루트의 .env)에서 읽어요. 없으면 오른쪽 기본값(로컬용)을 써요.
+spring:
+  application:
+    name: local-demand-map
+  config:
+    # 레포 루트의 .env 를 읽어요. backend/ 에서 실행하면 ../.env, 레포 루트에서 실행하면 .env
+    import:
+      - optional:file:../.env[.properties]
+      - optional:file:.env[.properties]
+  datasource:
+    # bootRun 할 때는 compose.yaml 의 MySQL 접속 정보가 이 값보다 먼저 쓰여요.
+    url: ${DATABASE_URL:jdbc:mysql://localhost:3307/local_demand}
+    username: ${DB_USERNAME:local_demand}
+    password: ${DB_PASSWORD:local_demand}
+  jpa:
+    open-in-view: false
+    hibernate:
+      # 테이블은 Flyway(db/migration)만 바꿔요. JPA는 엔티티와 테이블이 맞는지만 확인해요.
+      ddl-auto: validate
+  flyway:
+    locations: classpath:db/migration
+  docker:
+    compose:
+      # 서버를 꺼도 MySQL은 켜 둬서 다음 실행이 빨라요. 끄려면 docker compose stop
+      lifecycle-management: start-only
+
+server:
+  port: ${PORT:8080}
+
+app:
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:5173,http://localhost:3000}
+  demo-login:
+    enabled: ${DEMO_LOGIN_ENABLED:true}
+  kakao:
+    rest-api-key: ${KAKAO_REST_API_KEY:}
+    redirect-uri: ${KAKAO_REDIRECT_URI:}
+  ai:
+    api-key: ${AI_API_KEY:}

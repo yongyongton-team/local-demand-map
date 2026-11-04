@@ -1,0 +1,4 @@
+# 윈도우에서 받아도 gradlew 가 실행되게 줄바꿈을 고정해요
+/gradlew text eol=lf
+*.bat text eol=crlf
+*.jar binary

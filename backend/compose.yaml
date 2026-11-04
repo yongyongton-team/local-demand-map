@@ -1,0 +1,24 @@
+# 로컬 개발용 MySQL. ./gradlew bootRun 하면 스프링이 알아서 띄워요(Docker Desktop을 켜 두세요).
+# 직접 띄우려면: docker compose up -d
+name: local-demand-map
+
+services:
+  mysql:
+    image: mysql:8.4
+    environment:
+      MYSQL_DATABASE: local_demand
+      MYSQL_USER: local_demand
+      MYSQL_PASSWORD: local_demand
+      MYSQL_ROOT_PASSWORD: local_demand_root
+      TZ: Asia/Seoul
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+    ports:
+      # 3306은 다른 MySQL이 쓰고 있을 수 있어서 3307로 열어요. DB 도구로 볼 때도 localhost:3307
+      - "3307:3306"
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+volumes:
+  mysql-data:
