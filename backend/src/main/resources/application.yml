@@ -37,3 +37,8 @@ app:
     redirect-uri: ${KAKAO_REDIRECT_URI:}
   ai:
     api-key: ${AI_API_KEY:}
+  jwt:
+    # 입장권(JWT) 도장 키. 비워 두면 서버가 켜질 때마다 임시 키를 만들어요(로컬용). 배포 서버에는 꼭 넣어요.
+    secret: ${JWT_SECRET:}
+    # 손님 입장권 유효 기간(초). 30일 (명세 5-1)
+    guest-ttl-seconds: 2592000
