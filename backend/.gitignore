@@ -1,0 +1,8 @@
+# build/, .gradle/, .idea/ 는 레포 루트 .gitignore 에서 막아요
+*.iml
+bin/
+.classpath
+.project
+.settings/
+.factorypath
+HELP.md

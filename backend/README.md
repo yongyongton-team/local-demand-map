@@ -6,6 +6,85 @@ API 서버예요. 명세는 팀 노션의 "API 명세 초안 v0"을 따라요.
 - 같은 동네·같은 업종 중복 요청은 DB 고유 제약 `(user_id, dong_id, category_id)`으로 막아요
 - 시연용 로그인 `POST /auth/demo`는 `DEMO_LOGIN_ENABLED=false`면 꺼져요
 
+## 기술 스택
+
+Java 21, Spring Boot 4.1, Gradle, MySQL 8.4, Flyway, Spring Security, springdoc(Swagger)
+
+## 준비물
+
+- JDK 21 (`java -version`으로 확인. 다른 버전이면 IntelliJ에서 프로젝트 SDK를 21로)
+- Docker Desktop (로컬 MySQL을 띄워요)
+
 ## 실행 방법
 
-기술 스택이 정해지면 적어요.
+```bash
+cd backend
+./gradlew bootRun
+```
+
+- Docker Desktop을 켜 두면 `compose.yaml`의 MySQL(포트 3307)이 자동으로 떠요. 처음에는 이미지를 받느라 조금 걸려요.
+- 서버가 뜰 때 Flyway가 `src/main/resources/db/migration`의 SQL로 테이블을 만들어요.
+- 확인: http://localhost:8080/api/v1/health → `{"status":"UP"}`
+- Swagger: http://localhost:8080/swagger-ui.html
+- IntelliJ로 열 때는 `backend/` 폴더를 열어요(레포 루트를 열면 `compose.yaml`을 못 찾아요).
+
+환경변수는 레포 루트의 `.env`에서 읽어요(`cp .env.example .env`). 로컬은 기본값으로도 돌아가요.
+
+## 테스트
+
+```bash
+./gradlew test
+```
+
+- `ApiBasicsTest`: DB 없이 공통 규칙(주소, 로그인 확인, 오류 모양, CORS)을 봐요.
+- `ApplicationStartTest`: 실제 MySQL로 마이그레이션과 서버 시작을 봐요. Docker가 꺼져 있으면 건너뛰고, PR을 올리면 GitHub Actions에서 항상 돌아요.
+
+## 폴더(패키지)
+
+`src/main/java/com/yongyongton/localdemand/` 아래에 명세 화면별로 나눴어요. 각 폴더의 `package-info.java`에 맡을 API가 적혀 있어요.
+
+| 패키지 | 맡는 것 |
+|---|---|
+| `auth` | 카카오·시연용 로그인, 내 정보, 사장님 가게 등록, 토큰 확인 필터 |
+| `dong` | 동·업종 목록, 동네 지도, 빈 업종 |
+| `request` | 주민 요청(AI 정리, 보내기, 내 요청, 취소) |
+| `offer` | 선주문 수령(채택할지 정하는 중) |
+| `owner` | 사장님 요청 모아 보기·자세히 |
+| `founder` | 창업자 입지 순위·동네 리포트 |
+| `ai` | AI 호출(요청 정리, 요약 문장) |
+| `common` | 오류 처리, 보안, CORS, Swagger, 서버 상태 |
+
+## 같이 지킬 것
+
+- **주소**: 컨트롤러에는 명세처럼 `@GetMapping("/dongs")`만 써요. 앞에 `/api/v1`이 자동으로 붙어요(`WebConfig`).
+- **오류**: `throw new ApiException(ErrorCode.ALREADY_REQUESTED)`처럼 던지면 `{ "code", "message" }`로 바뀌어요. 새 코드가 필요하면 `ErrorCode`와 노션 명세를 같이 고쳐요.
+- **로그인 없이 여는 API**: `SecurityConfig`의 `PUBLIC_PATHS`에 더해요. 지금은 `/health`, `/auth/**`, Swagger만 열려 있고 나머지는 401이에요. 토큰 확인 필터는 로그인 담당이 `auth`에 만들어요. 서버 시작 로그의 `Using generated security password`는 그 필터를 붙이면 사라지니 지금은 무시해요.
+- **테이블 바꾸기**: main에 합친 마이그레이션 파일은 고치지 않아요. `V3__add_xxx.sql`처럼 다음 번호로 새 파일을 더해요. 브랜치끼리 번호가 겹치면 나중에 합치는 쪽이 번호를 바꿔요.
+- **엔티티**: `ddl-auto: validate`라서 엔티티와 테이블이 다르면 서버가 안 떠요. 오류 메시지에 어느 칼럼이 다른지 나와요.
+- **응답**: 엔티티를 그대로 내보내지 말고 DTO(`record`)로 만들어요. `open-in-view`를 꺼 둬서 서비스 밖에서는 지연 로딩이 안 돼요.
+- **중복 요청**: 서비스에서 먼저 확인하고, 동시에 두 번 들어와 고유 제약에 걸리면(`DataIntegrityViolationException`) `ALREADY_REQUESTED`로 바꿔요.
+- **비밀 값**: 카카오·AI 키는 `.env`(커밋 안 함)나 서버 환경변수에만 둬요. 주민 문장·AI 응답 본문은 로그에 남기지 않아요.
+
+## Spring Boot 4에서 헷갈리는 것
+
+인터넷 예제는 대부분 Boot 3 기준이라 그대로 따라 하면 막힐 수 있어요.
+
+- 스타터 이름이 바뀌었어요: `spring-boot-starter-web` → `spring-boot-starter-webmvc`, 테스트는 `spring-boot-starter-webmvc-test`. Flyway도 `spring-boot-starter-flyway`를 써요.
+- Jackson이 3.x예요. `com.fasterxml.jackson.databind.ObjectMapper`가 아니라 `tools.jackson.databind.ObjectMapper`예요(어노테이션 `com.fasterxml.jackson.annotation.*`은 그대로).
+- 테스트 어노테이션 위치: `@WebMvcTest`는 `org.springframework.boot.webmvc.test.autoconfigure`, `@AutoConfigureMockMvc`도 같은 곳이에요.
+- Swagger(springdoc)는 3.x를 써요. 2.x는 Boot 4에서 안 돌아요.
+
+## 환경변수
+
+| 이름 | 뜻 | 로컬 기본값 |
+|---|---|---|
+| `PORT` | 서버 포트 | 8080 |
+| `DATABASE_URL` | JDBC 주소 | `jdbc:mysql://localhost:3307/local_demand` |
+| `DB_USERNAME`, `DB_PASSWORD` | DB 계정 | `local_demand` |
+| `CORS_ALLOWED_ORIGINS` | 프론트 주소(쉼표로 구분) | `http://localhost:5173,http://localhost:3000` |
+| `DEMO_LOGIN_ENABLED` | 시연용 로그인 켜기 | true |
+| `KAKAO_REST_API_KEY`, `KAKAO_REDIRECT_URI` | 카카오 로그인 | 없음 |
+| `AI_API_KEY` | AI 키 | 없음 |
+
+- `bootRun`은 Docker의 MySQL 접속 정보를 먼저 써요. 배포 DB에 붙여 보려면 `SPRING_DOCKER_COMPOSE_ENABLED=false`를 함께 줘요.
+- 배포할 때는 `./gradlew bootJar`로 만든 `build/libs/local-demand-map-0.0.1-SNAPSHOT.jar`를 `java -jar`로 실행하고, 위 값을 서버 환경변수로 넣어요.
