@@ -55,6 +55,11 @@ public class AppUser {
         this.nickname = nickname;
     }
 
+    /** 손님 닉네임("손님" + 계정 번호)은 저장해서 id가 생긴 뒤에 붙여요. */
+    public void changeNickname(String nickname) {
+        this.nickname = nickname;
+    }
+
     /** PUT /me · 역할·동네 정하기(역할 바꾸기 포함). */
     public void changeProfile(Role role, Long dongId) {
         this.role = role;
