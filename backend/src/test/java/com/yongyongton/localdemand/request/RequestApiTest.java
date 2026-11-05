@@ -124,7 +124,7 @@ class RequestApiTest {
     }
 
     @Test
-    @DisplayName("시간대가 없거나 목록에 없는 조건 코드면 400")
+    @DisplayName("시간대가 없거나, 목록에 없는 조건 코드거나, 목록 안에 빈 칸(null)이 있으면 400")
     void validation() throws Exception {
         long dongId = insertDong("영덕1동");
         long categoryId = insertCategory("꽃집");
@@ -140,6 +140,18 @@ class RequestApiTest {
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"dongId\": " + dongId + ", \"categoryId\": " + categoryId
                                 + ", \"conditions\": [\"FOO\"], \"timeSlots\": [\"WEEKEND\"], \"frequency\": \"WEEKLY_PLUS\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        mockMvc.perform(post("/api/v1/requests").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dongId\": " + dongId + ", \"categoryId\": " + categoryId
+                                + ", \"timeSlots\": [null], \"frequency\": \"WEEKLY_PLUS\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
+        mockMvc.perform(post("/api/v1/requests").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dongId\": " + dongId + ", \"categoryId\": " + categoryId
+                                + ", \"conditions\": [null], \"timeSlots\": [\"WEEKEND\"], \"frequency\": \"WEEKLY_PLUS\"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }

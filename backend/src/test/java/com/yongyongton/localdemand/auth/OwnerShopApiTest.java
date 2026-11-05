@@ -34,8 +34,16 @@ class OwnerShopApiTest {
     @ServiceConnection
     static MySQLContainer mysql = new MySQLContainer(DockerImageName.parse("mysql:8.4"));
 
+    /**
+     * 테스트용 가짜 동 경계. 실제 용인 동 데이터(V3 시드)와 절대 겹치지 않게 한국 밖 좌표(위도 10, 경도 100 근처)를 써요.
+     * 경도 100.00~100.02, 위도 10.00~10.02 네모.
+     */
     private static final String SQUARE_FEATURE = "{\"type\":\"Feature\",\"geometry\":{\"type\":\"Polygon\",\"coordinates\":"
-            + "[[[127.10,37.26],[127.12,37.26],[127.12,37.28],[127.10,37.28],[127.10,37.26]]]}}";
+            + "[[[100.00,10.00],[100.02,10.00],[100.02,10.02],[100.00,10.02],[100.00,10.00]]]}}";
+    private static final double IN_LAT = 10.01;
+    private static final double IN_LON = 100.01;
+    private static final double OUT_LAT = 11.0;
+    private static final double OUT_LON = 101.0;
 
     @Autowired
     MockMvc mockMvc;
@@ -49,26 +57,26 @@ class OwnerShopApiTest {
     @Test
     @DisplayName("사장님이 가게를 등록하면 좌표가 들어가는 동을 찾아 넣고, 다시 부르면 덮어써요")
     void registerAndUpdate() throws Exception {
-        long dongId = insertDong("신갈동", SQUARE_FEATURE);
+        long dongId = insertDong("테스트동", SQUARE_FEATURE);
         long categoryId = insertCategory("과일·채소 가게");
         String token = ownerToken();
 
         mockMvc.perform(put("/api/v1/me/shop").header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body("싱싱과일", categoryId, 37.27, 127.11)))
+                        .content(body("싱싱과일", categoryId, IN_LAT, IN_LON)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shop.shopName").value("싱싱과일"))
                 .andExpect(jsonPath("$.shop.category.id").value(categoryId))
                 .andExpect(jsonPath("$.shop.category.name").value("과일·채소 가게"))
                 .andExpect(jsonPath("$.shop.dong.id").value(dongId))
-                .andExpect(jsonPath("$.shop.dong.name").value("신갈동"))
-                .andExpect(jsonPath("$.shop.lat").value(37.27))
-                .andExpect(jsonPath("$.shop.lon").value(127.11));
+                .andExpect(jsonPath("$.shop.dong.name").value("테스트동"))
+                .andExpect(jsonPath("$.shop.lat").value(IN_LAT))
+                .andExpect(jsonPath("$.shop.lon").value(IN_LON));
 
         // 다시 부르면 덮어써요. 경계 밖 좌표면 동은 null
         mockMvc.perform(put("/api/v1/me/shop").header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content(body("싱싱과일 2호점", categoryId, 37.50, 127.50)))
+                        .content(body("싱싱과일 2호점", categoryId, OUT_LAT, OUT_LON)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shop.shopName").value("싱싱과일 2호점"))
                 .andExpect(jsonPath("$.shop.dong").value(nullValue()));
@@ -125,7 +133,7 @@ class OwnerShopApiTest {
 
     private long insertDong(String name, String boundary) {
         String admCode = UUID.randomUUID().toString().substring(0, 10);
-        jdbc.update("INSERT INTO dong (adm_code, name, gu, center_lat, center_lon, boundary) VALUES (?, ?, '기흥구', 37.27, 127.11, ?)",
+        jdbc.update("INSERT INTO dong (adm_code, name, gu, center_lat, center_lon, boundary) VALUES (?, ?, '기흥구', 10.01, 100.01, ?)",
                 admCode, name, boundary);
         return jdbc.queryForObject("SELECT id FROM dong WHERE adm_code = ?", Long.class, admCode);
     }

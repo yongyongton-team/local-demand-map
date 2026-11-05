@@ -14,14 +14,14 @@ public final class RequestDtos {
 
     /**
      * POST /requests 요청. 업종·시간대(1개 이상)·빈도는 필수, 문장·조건은 선택.
-     * 목록에 없는 코드(예: "conditions": ["FOO"])가 오면 400.
+     * 목록에 없는 코드(예: "conditions": ["FOO"])나 빈 칸(예: "timeSlots": [null])이 오면 400.
      */
     public record CreateRequest(
             @NotNull Long dongId,
             @NotNull Long categoryId,
             @Size(max = 200) String text,
-            List<RequestCondition> conditions,
-            @NotEmpty List<TimeSlot> timeSlots,
+            List<@NotNull RequestCondition> conditions,
+            @NotEmpty List<@NotNull TimeSlot> timeSlots,
             @NotNull Frequency frequency) {
     }
 
