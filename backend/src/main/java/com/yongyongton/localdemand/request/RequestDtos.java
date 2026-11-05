@@ -1,5 +1,6 @@
 package com.yongyongton.localdemand.request;
 
+import com.yongyongton.localdemand.offer.OfferDtos.ResidentOfferView;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -46,7 +47,7 @@ public final class RequestDtos {
             List<TimeSlot> timeSlots,
             Frequency frequency,
             OffsetDateTime createdAt,
-            List<Object> offers) {
+            List<ResidentOfferView> offers) {
     }
 
     public record IdName(Long id, String name) {

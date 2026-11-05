@@ -14,6 +14,6 @@ public class DongService {
     }
 
     public List<Dong> getDongs() {
-        return dongRepository.findAll();
+        return dongRepository.findAllByOrderByGuAscNameAsc();
     }
 }

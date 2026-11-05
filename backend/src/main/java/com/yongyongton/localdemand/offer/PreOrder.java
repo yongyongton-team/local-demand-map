@@ -64,6 +64,12 @@ public class PreOrder {
         this.status = OrderStatus.CANCELLED;
     }
 
+    /** 취소했던 주문을 다시 주문으로 되살려요(한 사람은 한 제안에 한 줄만 있어서 새로 만들지 않아요). */
+    public void reserveAgain(int quantity) {
+        this.quantity = quantity;
+        this.status = OrderStatus.RESERVED;
+    }
+
     public void markPickedUp() {
         this.status = OrderStatus.PICKED_UP;
     }
