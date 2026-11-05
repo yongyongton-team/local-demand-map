@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.yongyongton.localdemand.auth.JwtConfig;
+import com.yongyongton.localdemand.common.HealthController;
 import com.yongyongton.localdemand.common.config.SecurityConfig;
 import com.yongyongton.localdemand.common.error.ApiException;
 import com.yongyongton.localdemand.common.error.ErrorCode;
@@ -27,9 +29,19 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
-/** DB 없이 공통 규칙(주소 앞부분, 로그인 확인, 오류 모양, CORS)을 확인해요. */
+
+/**
+ * DB 없이 공통 규칙(주소 앞부분, 로그인 확인, 오류 모양, CORS)을 확인해요.
+ * 컨트롤러는 HealthController와 아래 SampleController만 올려요.
+ * 다른 컨트롤러까지 올리면 서비스·DB가 필요해서 이 테스트가 깨져요.
+ */
 @WebMvcTest(controllers = HealthController.class)
-@Import({SecurityConfig.class, JsonSecurityErrorHandler.class, ApiBasicsTest.SampleController.class})
+@Import({
+        SecurityConfig.class,
+        JwtConfig.class,
+        JsonSecurityErrorHandler.class,
+        ApiBasicsTest.SampleController.class
+})
 class ApiBasicsTest {
 
     @Autowired
