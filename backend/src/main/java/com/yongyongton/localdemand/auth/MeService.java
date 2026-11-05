@@ -6,6 +6,8 @@ import com.yongyongton.localdemand.auth.MeDtos.MeResponse;
 import com.yongyongton.localdemand.auth.MeDtos.ShopDongView;
 import com.yongyongton.localdemand.auth.MeDtos.ShopView;
 import com.yongyongton.localdemand.auth.MeDtos.UpdateMeRequest;
+import com.yongyongton.localdemand.auth.ShopDtos.ShopResponse;
+import com.yongyongton.localdemand.auth.ShopDtos.UpdateShopRequest;
 import com.yongyongton.localdemand.common.error.ApiException;
 import com.yongyongton.localdemand.common.error.ErrorCode;
 import com.yongyongton.localdemand.dong.Category;
@@ -23,11 +25,14 @@ public class MeService {
 
     private final CurrentUser currentUser;
     private final OwnerShopRepository ownerShopRepository;
+    private final DongLocator dongLocator;
     private final EntityManager em;
 
-    public MeService(CurrentUser currentUser, OwnerShopRepository ownerShopRepository, EntityManager em) {
+    public MeService(CurrentUser currentUser, OwnerShopRepository ownerShopRepository, DongLocator dongLocator,
+                     EntityManager em) {
         this.currentUser = currentUser;
         this.ownerShopRepository = ownerShopRepository;
+        this.dongLocator = dongLocator;
         this.em = em;
     }
 
@@ -46,6 +51,29 @@ public class MeService {
         }
         user.changeProfile(request.role(), dongId);
         return toResponse(user);
+    }
+
+    /**
+     * PUT /me/shop · 사장님 가게 등록. 사장님만(아니면 403), 없는 업종이면 404.
+     * 좌표가 들어가는 동을 서버가 찾아 넣어요(용인시 밖이면 null). 다시 부르면 덮어써요(사장님 한 명에 가게 하나).
+     */
+    @Transactional
+    public ShopResponse updateShop(Jwt jwt, UpdateShopRequest request) {
+        AppUser owner = currentUser.require(jwt, Role.OWNER);
+        if (em.find(Category.class, request.categoryId()) == null) {
+            throw new ApiException(ErrorCode.NOT_FOUND, "없는 업종이에요.");
+        }
+        Long dongId = dongLocator.findDongId(request.lat(), request.lon()).orElse(null);
+        String shopName = request.shopName().trim();
+
+        OwnerShop shop = ownerShopRepository.findByUserId(owner.getId())
+                .map(existing -> {
+                    existing.update(shopName, request.categoryId(), request.lat(), request.lon(), dongId);
+                    return existing;
+                })
+                .orElseGet(() -> ownerShopRepository.save(
+                        new OwnerShop(owner, shopName, request.categoryId(), request.lat(), request.lon(), dongId)));
+        return new ShopResponse(toShopView(shop));
     }
 
     private MeResponse toResponse(AppUser user) {

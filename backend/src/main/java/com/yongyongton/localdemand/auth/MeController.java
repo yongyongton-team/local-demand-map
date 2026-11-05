@@ -2,6 +2,8 @@ package com.yongyongton.localdemand.auth;
 
 import com.yongyongton.localdemand.auth.MeDtos.MeResponse;
 import com.yongyongton.localdemand.auth.MeDtos.UpdateMeRequest;
+import com.yongyongton.localdemand.auth.ShopDtos.ShopResponse;
+import com.yongyongton.localdemand.auth.ShopDtos.UpdateShopRequest;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
@@ -29,5 +31,11 @@ public class MeController {
     @PutMapping("/me")
     public MeResponse update(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody UpdateMeRequest request) {
         return meService.update(jwt, request);
+    }
+
+    /** 사장님 가게 등록. 사장님만. 응답: { "shop": {...} } */
+    @PutMapping("/me/shop")
+    public ShopResponse updateShop(@AuthenticationPrincipal Jwt jwt, @Valid @RequestBody UpdateShopRequest request) {
+        return meService.updateShop(jwt, request);
     }
 }
