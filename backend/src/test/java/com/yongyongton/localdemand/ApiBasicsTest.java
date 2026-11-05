@@ -13,6 +13,7 @@ import com.yongyongton.localdemand.common.config.SecurityConfig;
 import com.yongyongton.localdemand.common.error.ApiException;
 import com.yongyongton.localdemand.common.error.ErrorCode;
 import com.yongyongton.localdemand.common.error.JsonSecurityErrorHandler;
+import com.yongyongton.localdemand.common.HealthController;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.DisplayName;
@@ -28,12 +29,19 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RestController;
 
+
 /**
  * DB 없이 공통 규칙(주소 앞부분, 로그인 확인, 오류 모양, CORS)을 확인해요.
- * 컨트롤러는 HealthController와 아래 SampleController만 올려요. 다른 컨트롤러까지 올리면 서비스·DB가 필요해서 이 테스트가 깨져요.
+ * 컨트롤러는 HealthController와 아래 SampleController만 올려요.
+ * 다른 컨트롤러까지 올리면 서비스·DB가 필요해서 이 테스트가 깨져요.
  */
 @WebMvcTest(controllers = HealthController.class)
-@Import({SecurityConfig.class, JwtConfig.class, JsonSecurityErrorHandler.class, ApiBasicsTest.SampleController.class})
+@Import({
+        SecurityConfig.class,
+        JwtConfig.class,
+        JsonSecurityErrorHandler.class,
+        ApiBasicsTest.SampleController.class
+})
 class ApiBasicsTest {
 
     @Autowired
