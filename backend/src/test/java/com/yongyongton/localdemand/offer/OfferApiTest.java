@@ -183,6 +183,33 @@ class OfferApiTest {
     }
 
     @Test
+    @DisplayName("주문이 있는 제안을 사장님이 취소하면 선주문도 같이 CANCELLED, orderCount 0, 주민 취소는 그냥 204")
+    void cancelOfferWithOrders() throws Exception {
+        Fixture f = fixture();
+        long offerId = offerId(offer(f, 20));
+        String resident = resident(f.dongId);
+        long orderId = json(order(resident, offerId, 3).andExpect(status().isCreated()).andReturn())
+                .get("order").get("id").asLong();
+        order(resident(f.dongId), offerId, 2).andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/offers/" + offerId + "/cancel").header("Authorization", "Bearer " + f.ownerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"))
+                .andExpect(jsonPath("$.orderCount").value(0));
+
+        Integer reserved = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM pre_order WHERE offer_id = ? AND status = 'RESERVED'", Integer.class, offerId);
+        Integer cancelled = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM pre_order WHERE offer_id = ? AND status = 'CANCELLED'", Integer.class, offerId);
+        assertThat(reserved).isZero();
+        assertThat(cancelled).isEqualTo(2);
+
+        // 주민이 뒤늦게 취소를 눌러도 막히지 않아요(이미 취소돼 있어서 그냥 204)
+        mockMvc.perform(delete("/api/v1/orders/" + orderId).header("Authorization", "Bearer " + resident))
+                .andExpect(status().isNoContent());
+    }
+
+    @Test
     @DisplayName("마감이 지나면: 채웠으면 CONFIRMED → 수령 끝 가능(선주문은 PICKED_UP), 못 채웠으면 CLOSED → 수령 끝 409, 주문·취소도 409")
     void deadline() throws Exception {
         Fixture f = fixture();

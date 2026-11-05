@@ -93,13 +93,18 @@ public class OfferService {
                 .toList();
     }
 
-    /** POST /offers/{id}/cancel · 내 제안만(403). OPEN·CONFIRMED일 때만, 아니면 409 OFFER_CLOSED. */
+    /**
+     * POST /offers/{id}/cancel · 내 제안만(403). OPEN·CONFIRMED일 때만, 아니면 409 OFFER_CLOSED.
+     * 제안을 취소하면 그 제안의 선주문(RESERVED)도 모두 취소(CANCELLED)해요. 응답의 orderCount 는 0이 돼요.
+     */
     @Transactional
     public OwnerOfferItem cancel(Jwt jwt, Long offerId) {
         Offer offer = myOffer(jwt, offerId);
-        long count = refreshStatus(offer);
+        refreshStatus(offer);
         offer.cancel();
-        return ownerItem(offer, count);
+        preOrderRepository.findByOfferIdAndStatus(offer.getId(), OrderStatus.RESERVED)
+                .forEach(PreOrder::cancel);
+        return ownerItem(offer, orderCount(offer));
     }
 
     /**
