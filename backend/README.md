@@ -45,7 +45,7 @@ cd backend
 
 | 패키지 | 맡는 것 |
 |---|---|
-| `auth` | 카카오·시연용 로그인, 내 정보, 사장님 가게 등록, 토큰 확인 필터 |
+| `auth` | 손님·시연용 로그인, 내 정보, 사장님 가게 등록, 토큰 확인 필터 |
 | `dong` | 동·업종 목록, 동네 지도, 빈 업종 |
 | `request` | 주민 요청(AI 정리, 보내기, 내 요청, 취소) |
 | `offer` | 선주문 수령(채택할지 정하는 중) |
@@ -85,7 +85,7 @@ cd backend
 | `DB_USERNAME`, `DB_PASSWORD` | DB 계정 | `local_demand` |
 | `CORS_ALLOWED_ORIGINS` | 프론트 주소(쉼표로 구분) | `http://localhost:5173,http://localhost:3000` |
 | `DEMO_LOGIN_ENABLED` | 시연용 로그인 켜기 | true |
-| `KAKAO_REST_API_KEY`, `KAKAO_REDIRECT_URI` | 카카오 로그인 | 없음 |
+| `KAKAO_REST_API_KEY`, `KAKAO_REDIRECT_URI` | 카카오 로그인(MVP에서는 안 씀) | 없음 |
 | `AI_API_KEY` | AI 키 | 없음 |
 | `JWT_SECRET` | 토큰(JWT) 도장 키. base64, 32바이트 이상 | 없음(비우면 서버가 켜질 때마다 임시 키) |
 
