@@ -10,6 +10,7 @@ import com.yongyongton.localdemand.common.error.ApiException;
 import com.yongyongton.localdemand.common.error.ErrorCode;
 import com.yongyongton.localdemand.dong.Category;
 import com.yongyongton.localdemand.dong.Dong;
+import com.yongyongton.localdemand.offer.OfferService;
 import com.yongyongton.localdemand.request.RequestDtos.CreateRequest;
 import com.yongyongton.localdemand.request.RequestDtos.CreateResponse;
 import com.yongyongton.localdemand.request.RequestDtos.IdName;
@@ -33,15 +34,17 @@ public class RequestService {
     private final CurrentUser currentUser;
     private final ShopRequestRepository requestRepository;
     private final OwnerShopRepository ownerShopRepository;
+    private final OfferService offerService;
     private final EntityManager em;
     private final int goal;
 
     public RequestService(CurrentUser currentUser, ShopRequestRepository requestRepository,
-                          OwnerShopRepository ownerShopRepository, EntityManager em,
+                          OwnerShopRepository ownerShopRepository, OfferService offerService, EntityManager em,
                           @Value("${app.request.goal:30}") int goal) {
         this.currentUser = currentUser;
         this.requestRepository = requestRepository;
         this.ownerShopRepository = ownerShopRepository;
+        this.offerService = offerService;
         this.em = em;
         this.goal = goal;
     }
@@ -85,7 +88,7 @@ public class RequestService {
                 count, goal, reachedGoal, notified);
     }
 
-    /** GET /me/requests · 최근 요청이 맨 위. 없으면 []. offers 는 선주문 API를 만들 때 채워요(지금은 []). */
+    /** GET /me/requests · 최근 요청이 맨 위. 없으면 []. offers 는 그 동·업종 선주문 제안(취소된 것 빼고). */
     @Transactional(readOnly = true)
     public List<MyRequest> myRequests(Jwt jwt) {
         AppUser user = currentUser.get(jwt);
@@ -98,7 +101,7 @@ public class RequestService {
                         r.getTimeSlots(),
                         r.getFrequency(),
                         KstTime.of(r.getCreatedAt()),
-                        List.of()))
+                        offerService.offersFor(r.getDongId(), r.getCategoryId(), user.getId())))
                 .toList();
     }
 
