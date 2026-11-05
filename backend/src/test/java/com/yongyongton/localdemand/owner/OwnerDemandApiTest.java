@@ -48,9 +48,12 @@ class OwnerDemandApiTest {
     @ServiceConnection
     static MySQLContainer mysql = new MySQLContainer(DockerImageName.parse("mysql:8.4"));
 
-    /** 내 가게 위치. 동 A는 0.9km, 동 B는 2.2km, 먼 동은 4.4km 떨어져 있어요. */
-    private static final double SHOP_LAT = 37.30;
-    private static final double SHOP_LON = 127.10;
+    /**
+     * 내 가게 위치. 실제 용인 동 경계(V3 시드)와 겹치지 않게 한국 밖(위도 10, 경도 100)을 써요.
+     * 동 A는 1.1km, 동 B는 2.2km, 먼 동은 4.4km 떨어져 있어요.
+     */
+    private static final double SHOP_LAT = 10.00;
+    private static final double SHOP_LON = 100.00;
 
     @Autowired
     MockMvc mockMvc;
@@ -68,9 +71,9 @@ class OwnerDemandApiTest {
     @DisplayName("화면 4: 기본 3km 안, 요청 많은 순. 거리·많이 고른 시간대·같은 업종 가게 수")
     void demandWithinRadius() throws Exception {
         long categoryId = insertCategory("과일·채소 가게");
-        long dongA = insertDong("가동", "기흥구", 37.30, 127.11);
-        long dongB = insertDong("나동", "수지구", 37.32, 127.10);
-        long far = insertDong("먼동", "기흥구", 37.30, 127.15);
+        long dongA = insertDong("가동", "기흥구", 10.00, 100.01);
+        long dongB = insertDong("나동", "수지구", 10.02, 100.00);
+        long far = insertDong("먼동", "기흥구", 10.00, 100.04);
         insertRequest(dongA, categoryId, "", "WEEKEND");
         insertRequest(dongB, categoryId, "LATE_OPEN", "WEEKDAY_EVENING,WEEKEND");
         insertRequest(dongB, categoryId, "", "WEEKDAY_EVENING");
@@ -98,10 +101,10 @@ class OwnerDemandApiTest {
                 .andExpect(jsonPath("$.areas[0].distanceKm").value(2.2))
                 .andExpect(jsonPath("$.areas[0].topTimeSlot").value("WEEKDAY_EVENING"))
                 .andExpect(jsonPath("$.areas[0].sameCategoryStoreCount").value(2))
-                .andExpect(jsonPath("$.areas[0].center.lat").value(37.32))
-                .andExpect(jsonPath("$.areas[0].center.lon").value(127.10))
+                .andExpect(jsonPath("$.areas[0].center.lat").value(10.02))
+                .andExpect(jsonPath("$.areas[0].center.lon").value(100.00))
                 .andExpect(jsonPath("$.areas[1].dongId").value(dongA))
-                .andExpect(jsonPath("$.areas[1].distanceKm").value(0.9))
+                .andExpect(jsonPath("$.areas[1].distanceKm").value(1.1))
                 .andExpect(jsonPath("$.areas[1].topTimeSlot").value("WEEKEND"))
                 .andExpect(jsonPath("$.areas[1].sameCategoryStoreCount").value(0));
 
@@ -209,7 +212,7 @@ class OwnerDemandApiTest {
     }
 
     @Test
-    @DisplayName("권한·없는 것: 주민 403, 가게 없는 사장님 404(업종을 주면 화면 5는 돼요), 없는 동·업종 404, 요청 0이면 AI 없이 기본 문장")
+    @DisplayName("권한·없는 것: 주민 403, 가게 없는 사장님 400(업종을 주면 화면 5는 돼요), 없는 동·업종 404, 요청 0이면 AI 없이 기본 문장")
     void rulesAndErrors() throws Exception {
         long categoryId = insertCategory("세탁소");
         long dongId = insertDong("신갈동", "기흥구", 37.27, 127.11);
@@ -226,10 +229,11 @@ class OwnerDemandApiTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"role\": \"OWNER\"}"))
                 .andExpect(status().isOk());
         mockMvc.perform(get("/api/v1/owner/demand").header("Authorization", "Bearer " + noShop))
-                .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.message").value("가게를 먼저 등록해 주세요."));
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"))
+                .andExpect(jsonPath("$.message").value("먼저 가게를 등록해 주세요."));
         mockMvc.perform(get("/api/v1/owner/demand/" + dongId).header("Authorization", "Bearer " + noShop))
-                .andExpect(status().isNotFound());
+                .andExpect(status().isBadRequest());
         mockMvc.perform(get("/api/v1/owner/demand/" + dongId).param("categoryId", String.valueOf(categoryId))
                         .header("Authorization", "Bearer " + noShop))
                 .andExpect(status().isOk())

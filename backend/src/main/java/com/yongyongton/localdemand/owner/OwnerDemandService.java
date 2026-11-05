@@ -71,7 +71,7 @@ public class OwnerDemandService {
     /**
      * GET /owner/demand (화면 4). 내 가게 업종의 요청이 있는 동네를 요청 많은 순으로.
      * ?gu= 가 있으면 그 구 전체, 없으면 내 가게에서 radiusKm(기본 3km) 안.
-     * 사장님만(아니면 403), 가게를 등록하지 않았으면 404.
+     * 사장님만(아니면 403), 가게를 등록하지 않았으면 400.
      */
     public DemandResponse demand(Jwt jwt, Double radiusKm, String gu) {
         AppUser owner = currentUser.require(jwt, Role.OWNER);
@@ -130,7 +130,7 @@ public class OwnerDemandService {
 
     /**
      * GET /owner/demand/{dongId} (화면 5). ?categoryId= 를 빼면 내 가게 업종.
-     * 사장님만(아니면 403), 없는 동·업종이면 404, 업종을 빼고 불렀는데 가게가 없으면 404.
+     * 사장님만(아니면 403), 없는 동·업종이면 404, 업종을 빼고 불렀는데 가게가 없으면 400.
      */
     public DetailResponse detail(Jwt jwt, Long dongId, Long categoryId) {
         AppUser owner = currentUser.require(jwt, Role.OWNER);
@@ -230,9 +230,10 @@ public class OwnerDemandService {
         return text.toString();
     }
 
+    /** 가게를 등록하지 않았으면 400. POST /offers 와 같은 코드·문장이에요. */
     private OwnerShop shopOf(AppUser owner) {
         return ownerShopRepository.findByUserId(owner.getId())
-                .orElseThrow(() -> new ApiException(ErrorCode.NOT_FOUND, "가게를 먼저 등록해 주세요."));
+                .orElseThrow(() -> new ApiException(ErrorCode.VALIDATION_ERROR, "먼저 가게를 등록해 주세요."));
     }
 
     /** 동마다 같은 업종 가게 수(상가정보 store, 동 경계 기준). */
