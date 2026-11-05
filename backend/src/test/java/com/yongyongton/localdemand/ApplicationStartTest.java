@@ -72,4 +72,24 @@ class ApplicationStartTest {
                 .andExpect(jsonPath("$[0].martCheck").value(true))
                 .andExpect(jsonPath("$[0].sbizName").doesNotExist());
     }
+    @Test
+    @DisplayName("마트 12개와 상가 18,321개가 등록돼요")
+    void martAndStoreSeedsHaveExpectedCounts() {
+        Integer martCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM mart", Integer.class);
+
+        Integer storeCount = jdbc.queryForObject(
+                "SELECT COUNT(*) FROM store", Integer.class);
+
+        Integer mappedStoreCount = jdbc.queryForObject("""
+            SELECT COUNT(*)
+            FROM store s
+            JOIN category c ON s.category_id = c.id
+            JOIN dong d ON s.dong_id = d.id
+            """, Integer.class);
+
+        assertThat(martCount).isEqualTo(12);
+        assertThat(storeCount).isEqualTo(18_321);
+        assertThat(mappedStoreCount).isEqualTo(18_321);
+    }
 }
