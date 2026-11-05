@@ -13,7 +13,6 @@ import com.yongyongton.localdemand.common.config.SecurityConfig;
 import com.yongyongton.localdemand.common.error.ApiException;
 import com.yongyongton.localdemand.common.error.ErrorCode;
 import com.yongyongton.localdemand.common.error.JsonSecurityErrorHandler;
-import com.yongyongton.localdemand.common.HealthController;
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotBlank;
 import org.junit.jupiter.api.DisplayName;

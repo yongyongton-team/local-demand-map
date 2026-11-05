@@ -3,6 +3,7 @@ package com.yongyongton.localdemand;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -12,6 +13,7 @@ import org.springframework.boot.testcontainers.service.connection.ServiceConnect
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.security.test.context.support.WithMockUser;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -48,5 +50,26 @@ class ApplicationStartTest {
         assertThat(tables).isEqualTo(6);
 
         mockMvc.perform(get("/api/v1/health")).andExpect(status().isOk());
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("GET /dongs는 행정동 39개를 반환한다")
+    void dongsReturn39() throws Exception {
+        mockMvc.perform(get("/api/v1/dongs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(39));
+    }
+
+    @Test
+    @WithMockUser
+    @DisplayName("GET /categories는 업종 38개를 반환한다")
+    void categoriesReturn38() throws Exception {
+        mockMvc.perform(get("/api/v1/categories"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(38))
+                .andExpect(jsonPath("$[0].code").value("FRUIT_VEG"))
+                .andExpect(jsonPath("$[0].martCheck").value(true))
+                .andExpect(jsonPath("$[0].sbizName").doesNotExist());
     }
 }
