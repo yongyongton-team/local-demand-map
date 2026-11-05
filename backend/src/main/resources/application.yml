@@ -36,7 +36,16 @@ app:
     rest-api-key: ${KAKAO_REST_API_KEY:}
     redirect-uri: ${KAKAO_REDIRECT_URI:}
   ai:
+    # fake: AI 없이 낱말 맞추기(개발·시연 예비용, 요약은 기본 문장). openai: OpenAI API (키를 넣어야 해요)
+    provider: ${AI_PROVIDER:fake}
     api-key: ${AI_API_KEY:}
+    base-url: ${AI_BASE_URL:https://api.openai.com/v1}
+    # 가장 싸고 빠른 GPT-6 모델(2026-11 기준). 바꾸면 그 모델이 reasoning_effort none 을 받는지 확인해요
+    model: ${AI_MODEL:gpt-6-luna}
+    timeout-seconds: ${AI_TIMEOUT_SECONDS:15}
+    json-mode: ${AI_JSON_MODE:true}
+    # none = 생각 없이 바로 답해요(빠르고 쌈). 업종 고르기·짧은 요약에는 충분해요. 비우면 보내지 않아요(모델 기본값 medium)
+    reasoning-effort: ${AI_REASONING_EFFORT:none}
   jwt:
     # 입장권(JWT) 도장 키. 비워 두면 서버가 켜질 때마다 임시 키를 만들어요(로컬용). 배포 서버에는 꼭 넣어요.
     secret: ${JWT_SECRET:}

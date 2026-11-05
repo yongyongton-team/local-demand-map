@@ -38,6 +38,22 @@ cd backend
 
 - `ApiBasicsTest`: DB 없이 공통 규칙(주소, 로그인 확인, 오류 모양, CORS)을 봐요.
 - `ApplicationStartTest`: 실제 MySQL로 마이그레이션과 서버 시작을 봐요. Docker가 꺼져 있으면 건너뛰고, PR을 올리면 GitHub Actions에서 항상 돌아요.
+- AI 테스트는 실제 AI API를 부르지 않아요. 가짜 AI(Mockito)나 테스트 안에 띄운 가짜 HTTP 서버를 써요.
+
+## AI 쓰기
+
+`AI_PROVIDER`로 골라요. 기본값은 `fake`라서 키 없이도 서버가 떠요.
+
+| AI_PROVIDER | 요청 문장 정리 | 요약 문장(화면 5·7) |
+|---|---|---|
+| `fake` (기본) | AI 없이 업종 이름·조건 낱말이 문장에 있는지만 봐요. 응답 `by: "KEYWORD"` | 항상 서버 기본 문장(`by: "TEMPLATE"`) |
+| `openai` | OpenAI Chat Completions로 모델을 불러요. 응답 `by: "AI"` | AI 문장. 검사에서 떨어지면 기본 문장 |
+
+- OpenAI로 켜기: 레포 루트 `.env`에 `AI_PROVIDER=openai`와 `AI_API_KEY=키`만 넣으면 돼요. 모델은 기본값 `gpt-6-luna`(GPT-6 중 가장 싸고 빠름), `reasoning_effort`는 `none`(생각 없이 바로 답함)이에요. 업종 고르기·짧은 요약에는 이걸로 충분하고, 주민이 입력을 멈출 때마다 부르니 빨라야 해요.
+- 모델을 바꾸면(`AI_MODEL`) 그 모델이 `reasoning_effort: none`을 받는지 OpenAI 모델 페이지에서 확인해요. 안 받으면 `AI_REASONING_EFFORT=low`.
+- `openai`인데 키가 비면 서버가 켜지지 않아요(배포 실수를 바로 알려고). 키는 `.env`(커밋 안 함)나 서버 환경변수에만 두고 단톡방·캡처에 올리지 않아요.
+- 요약 문장 검사(`SummaryValidator`): 문장 속 숫자가 서버가 넣은 숫자에 없거나, "확실히·반드시·무조건·보장" 같은 말이 있으면 버리고 기본 문장을 써요. 통과한 문장은 `ai_summary`에 저장해 같은 숫자면 AI를 다시 부르지 않아요. 지시문을 바꾸면 `SummaryService.PROMPT_VERSION`을 올려요.
+- 지시문(프롬프트)은 `LlmAiWriter`에 있어요. 주민 문장은 `<주민문장>` 구분자로 감싸고 안의 지시를 따르지 말라고 적어요. JSON이 깨지면 한 번만 다시 불러요.
 
 ## 폴더(패키지)
 
@@ -47,11 +63,11 @@ cd backend
 |---|---|
 | `auth` | 손님·시연용 로그인, 내 정보, 사장님 가게 등록, 토큰 확인 필터 |
 | `dong` | 동·업종 목록, 동네 지도, 빈 업종 |
-| `request` | 주민 요청(AI 정리, 보내기, 내 요청, 취소) |
+| `request` | 주민 요청(보내기, 내 요청, 취소) |
 | `offer` | 선주문 수령(채택할지 정하는 중) |
 | `owner` | 사장님 요청 모아 보기·자세히 |
 | `founder` | 창업자 입지 순위·동네 리포트 |
-| `ai` | AI 호출(요청 정리, 요약 문장) |
+| `ai` | AI 호출(요청 문장 정리 `POST /requests/parse`, 요약 문장과 숫자 검사) |
 | `common` | 오류 처리, 보안, CORS, Swagger, 서버 상태 |
 
 ## 같이 지킬 것
@@ -86,7 +102,13 @@ cd backend
 | `CORS_ALLOWED_ORIGINS` | 프론트 주소(쉼표로 구분) | `http://localhost:5173,http://localhost:3000` |
 | `DEMO_LOGIN_ENABLED` | 시연용 로그인 켜기 | true |
 | `KAKAO_REST_API_KEY`, `KAKAO_REDIRECT_URI` | 카카오 로그인(MVP에서는 안 씀) | 없음 |
-| `AI_API_KEY` | AI 키 | 없음 |
+| `AI_PROVIDER` | `fake`(AI 없이 낱말 맞추기) 또는 `openai` | fake |
+| `AI_API_KEY` | OpenAI 키 | 없음 |
+| `AI_BASE_URL` | API 주소 | `https://api.openai.com/v1` |
+| `AI_MODEL` | 모델 이름 | `gpt-6-luna` |
+| `AI_REASONING_EFFORT` | `reasoning_effort` 값. 비우면 안 보냄 | none |
+| `AI_TIMEOUT_SECONDS` | AI 응답 기다리는 시간(초) | 15 |
+| `AI_JSON_MODE` | `response_format: json_object`를 보낼지 | true |
 | `JWT_SECRET` | 토큰(JWT) 도장 키. base64, 32바이트 이상 | 없음(비우면 서버가 켜질 때마다 임시 키) |
 
 - `bootRun`은 Docker의 MySQL 접속 정보를 먼저 써요. 배포 DB에 붙여 보려면 `SPRING_DOCKER_COMPOSE_ENABLED=false`를 함께 줘요.
