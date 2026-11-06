@@ -8,6 +8,7 @@ import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.RequestParam;
 
 @RestController
 public class DongController {
@@ -41,5 +42,15 @@ public class DongController {
     }
 
     public record DongResponse(Long id, String name, String gu) {
+    }
+
+    @GetMapping("/dongs/{dongId}/map")
+    public DongMapResponse getDongMap(
+            @PathVariable Long dongId,
+            @RequestParam(required = false) Long categoryId,
+            @AuthenticationPrincipal Jwt jwt
+    ) {
+        currentUser.require(jwt, Role.RESIDENT);
+        return dongService.getDongMap(dongId, categoryId);
     }
 }
