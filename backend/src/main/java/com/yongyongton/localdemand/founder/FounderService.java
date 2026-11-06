@@ -165,7 +165,8 @@ public class FounderService {
             double score = requestCount - 3.0 * storeCount;
 
             // 식품 업종 + 대형마트 1.5km 이내
-            if (category.isMartCheck()
+            if (score > 0
+                    && category.isMartCheck()
                     && nearestMartKm != null
                     && nearestMartKm <= 1.5) {
                 score *= 0.5;
@@ -193,6 +194,11 @@ public class FounderService {
                                 FounderRankingResponse.RankingItem::score
                         )
                         .reversed()
+                        .thenComparing(
+                                Comparator.comparingLong(
+                                        FounderRankingResponse.RankingItem::requestCount
+                                ).reversed()
+                        )
                         .thenComparing(
                                 FounderRankingResponse.RankingItem::dongId
                         )
