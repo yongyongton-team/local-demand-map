@@ -2,6 +2,7 @@ package com.yongyongton.localdemand.dong;
 
 import com.yongyongton.localdemand.common.error.ApiException;
 import com.yongyongton.localdemand.common.error.ErrorCode;
+import com.yongyongton.localdemand.common.Geo;
 import com.yongyongton.localdemand.request.ShopRequestRepository;
 import jakarta.persistence.EntityManager;
 import tools.jackson.databind.ObjectMapper;
@@ -97,7 +98,7 @@ public class DongService {
                         if (mart != null) {
                             nearestMart = new GapResponse.NearestMartResponse(
                                     mart.getName(),
-                                    gap.getNearestMartKm()
+                                    Geo.round1(gap.getNearestMartKm())
                             );
                         }
                     }
