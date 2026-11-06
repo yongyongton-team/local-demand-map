@@ -7,4 +7,7 @@ public interface AppUserRepository extends JpaRepository<AppUser, Long> {
 
     /** 시연 계정 찾기. 같은 닉네임·역할 계정이 여러 개면 제일 먼저 만든 것. */
     Optional<AppUser> findFirstByNicknameAndRoleOrderByIdAsc(String nickname, Role role);
+
+    /** 시연 시드를 이미 넣었는지 볼 때. */
+    boolean existsByNickname(String nickname);
 }

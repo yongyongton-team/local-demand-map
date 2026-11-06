@@ -54,12 +54,16 @@ class OwnerShopApiTest {
     @Autowired
     JdbcTemplate jdbc;
 
+    @Autowired
+    TokenService tokenService;
+
     @Test
     @DisplayName("사장님이 가게를 등록하면 좌표가 들어가는 동을 찾아 넣고, 다시 부르면 덮어써요")
     void registerAndUpdate() throws Exception {
         long dongId = insertDong("테스트동", SQUARE_FEATURE);
         long categoryId = insertCategory("과일·채소 가게");
-        String token = ownerToken();
+        long ownerId = newOwner();
+        String token = tokenService.issue(ownerId);
 
         mockMvc.perform(put("/api/v1/me/shop").header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -81,7 +85,6 @@ class OwnerShopApiTest {
                 .andExpect(jsonPath("$.shop.shopName").value("싱싱과일 2호점"))
                 .andExpect(jsonPath("$.shop.dong").value(nullValue()));
 
-        Long ownerId = jdbc.queryForObject("SELECT id FROM app_user WHERE nickname = '시연 사장님'", Long.class);
         Integer shops = jdbc.queryForObject("SELECT COUNT(*) FROM owner_shop WHERE user_id = ?", Integer.class, ownerId);
         assertThat(shops).isEqualTo(1);
     }
@@ -102,7 +105,7 @@ class OwnerShopApiTest {
     @Test
     @DisplayName("없는 업종이면 404, 필수 값이 없으면 400")
     void errors() throws Exception {
-        String token = ownerToken();
+        String token = tokenService.issue(newOwner());
         mockMvc.perform(put("/api/v1/me/shop").header("Authorization", "Bearer " + token)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(body("싱싱과일", 999999L, 37.27, 127.11)))
@@ -115,11 +118,11 @@ class OwnerShopApiTest {
                 .andExpect(jsonPath("$.code").value("VALIDATION_ERROR"));
     }
 
-    private String ownerToken() throws Exception {
-        return token(mockMvc.perform(post("/api/v1/auth/demo")
-                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\": \"OWNER\"}"))
-                .andExpect(status().isOk())
-                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8));
+    /** 이 테스트만의 사장님 계정(시연 사장님은 시드가 켜져 있으면 이미 가게가 있어서 안 써요). */
+    private long newOwner() {
+        String nickname = "사장" + UUID.randomUUID().toString().substring(0, 8);
+        jdbc.update("INSERT INTO app_user (nickname, role) VALUES (?, 'OWNER')", nickname);
+        return jdbc.queryForObject("SELECT id FROM app_user WHERE nickname = ?", Long.class, nickname);
     }
 
     private String token(String json) {

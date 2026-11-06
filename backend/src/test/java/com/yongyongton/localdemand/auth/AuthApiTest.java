@@ -52,6 +52,9 @@ class AuthApiTest {
     @Autowired
     JdbcTemplate jdbc;
 
+    @Autowired
+    TokenService tokenService;
+
     @Test
     @DisplayName("손님 계정: 새 계정과 30일짜리 입장권을 주고, 입장권 안에는 계정 id가 들어 있어요")
     void guest() throws Exception {
@@ -180,12 +183,14 @@ class AuthApiTest {
         jdbc.update("INSERT INTO category (code, name, sbiz_name, mart_check) VALUES (?, '과일·채소 가게', '채소/과일 소매업', TRUE)", code);
         long categoryId = jdbc.queryForObject("SELECT id FROM category WHERE code = ?", Long.class, code);
 
-        MvcResult login = mockMvc.perform(post("/api/v1/auth/demo")
-                .contentType(MediaType.APPLICATION_JSON).content("{\"role\": \"OWNER\"}")).andReturn();
-        jdbc.update("INSERT INTO owner_shop (user_id, shop_name, category_id, lat, lon, dong_id) VALUES (?, '싱싱과일', ?, 37.27, 127.11, ?) "
-                + "ON DUPLICATE KEY UPDATE shop_name = VALUES(shop_name)", userId(login), categoryId, dongId);
+        // 시연 사장님 계정은 시드가 켜져 있으면 이미 가게가 있어서, 이 테스트만의 사장님을 만들어요
+        String nickname = "사장" + UUID.randomUUID().toString().substring(0, 8);
+        jdbc.update("INSERT INTO app_user (nickname, role) VALUES (?, 'OWNER')", nickname);
+        long ownerId = jdbc.queryForObject("SELECT id FROM app_user WHERE nickname = ?", Long.class, nickname);
+        jdbc.update("INSERT INTO owner_shop (user_id, shop_name, category_id, lat, lon, dong_id) VALUES (?, '싱싱과일', ?, 37.27, 127.11, ?)",
+                ownerId, categoryId, dongId);
 
-        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + token(login)))
+        mockMvc.perform(get("/api/v1/me").header("Authorization", "Bearer " + tokenService.issue(ownerId)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.shop.shopName").value("싱싱과일"))
                 .andExpect(jsonPath("$.shop.category.name").value("과일·채소 가게"))

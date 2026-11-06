@@ -52,7 +52,8 @@ public class AuthService {
         return respond(userRepository.save(user), true);
     }
 
-    static String demoNickname(Role role) {
+    /** 역할별 시연 계정 닉네임. 시연 시드(demo.DemoSeeder)도 이 이름으로 계정을 만들어요. */
+    public static String demoNickname(Role role) {
         return switch (role) {
             case RESIDENT -> "시연 주민";
             case OWNER -> "시연 사장님";
