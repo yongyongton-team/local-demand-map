@@ -22,6 +22,7 @@ public class FounderController {
         this.currentUser = currentUser;
     }
 
+    // 1. 예비 창업자 입지 순위 조회
     @GetMapping("/founder/rankings")
     public FounderRankingResponse getRankings(
             @AuthenticationPrincipal Jwt jwt,
@@ -30,5 +31,16 @@ public class FounderController {
     ) {
         currentUser.require(jwt, Role.FOUNDER);
         return founderService.getRankings(categoryId, limit);
+    }
+
+    // 2. 예비 창업자 동네 리포트 조회
+    @GetMapping("/founder/report")
+    public FounderReportResponse getReport(
+            @AuthenticationPrincipal Jwt jwt,
+            @RequestParam Long dongId,
+            @RequestParam Long categoryId
+    ) {
+        currentUser.require(jwt, Role.FOUNDER);
+        return founderService.getReport(dongId, categoryId);
     }
 }
