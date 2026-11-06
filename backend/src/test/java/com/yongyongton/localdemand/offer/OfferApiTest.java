@@ -1,6 +1,7 @@
 package com.yongyongton.localdemand.offer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -224,8 +225,8 @@ class OfferApiTest {
                 java.sql.Timestamp.valueOf(java.time.LocalDateTime.now(KST).minusHours(1)), filled, notFilled);
 
         mockMvc.perform(get("/api/v1/owner/offers").header("Authorization", "Bearer " + f.ownerToken))
-                .andExpect(jsonPath("$[?(@.id == " + filled + ")].status").value("CONFIRMED"))
-                .andExpect(jsonPath("$[?(@.id == " + notFilled + ")].status").value("CLOSED"));
+                .andExpect(jsonPath("$[?(@.id == " + filled + ")].status", hasItem("CONFIRMED")))
+                .andExpect(jsonPath("$[?(@.id == " + notFilled + ")].status", hasItem("CLOSED")));
 
         order(resident(f.dongId), filled, 1).andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("OFFER_CLOSED"));

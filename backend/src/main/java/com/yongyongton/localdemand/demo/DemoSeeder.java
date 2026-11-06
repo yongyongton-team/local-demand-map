@@ -29,7 +29,8 @@ import org.springframework.transaction.annotation.Transactional;
  * 시연용 예시 데이터 (명세 8번 결정 5, 5-1 "시연 계정은 시드로 미리 만들어 둬요").
  * DEMO_SEED_ENABLED=true 일 때만 서버가 켜질 때 돌아요. 발표 때 "예시 데이터"라고 밝혀요.
  *
- * <p><b>1. 예시 주민 요청</b>(처음 한 번만. 예시주민1 이 있으면 건너뛰어요). 숫자는 명세·와이어프레임 예시에 맞췄어요.
+ * <p><b>1. 예시 주민 요청</b>(켤 때마다 예시 주민 요청을 지우고 다시 넣어요 → 예전에 시드를 넣은 DB도 항상 아래 숫자로 맞춰져요).
+ * 숫자는 명세·와이어프레임 예시에 맞췄어요.
  * <ul>
  *   <li>구성동 과일·채소 29(시연 주민이 누르면 30) — 화면 5: 늦게까지 18·낱개 11·배달 7, 평일 저녁 60%·주말 30%·평일 낮 10%</li>
  *   <li>구성동 반찬 11(+시연 주민 = 12), 구성동 빵집 6 — 화면 1, 명세 gaps 예시</li>
@@ -43,7 +44,7 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>시연 사장님: 싱싱과일(과일·채소) 가게를 마북동 지점으로 되돌리고, 만든 제안·그 선주문을 지워요</li>
  *   <li>시연 창업자: 역할만 되돌려요</li>
  * </ul>
- * 예시 주민·다른 손님 계정의 데이터는 건드리지 않아요.
+ * 계정은 닉네임으로만 찾아요(시연 중에 역할을 바꿔도 같은 계정을 다시 쓰고 역할을 되돌려요). 다른 손님 계정의 데이터는 건드리지 않아요.
  *
  * <p>동·업종 데이터(V3·V4)가 없으면 서버가 켜지지 않게 멈춰요. 시연 서버에서 빈 화면으로 발표하는 일을 막으려고요.
  */
@@ -86,11 +87,7 @@ public class DemoSeeder implements ApplicationRunner {
     @Transactional
     public void run(ApplicationArguments args) {
         Refs refs = loadRefs();
-        if (userRepository.existsByNickname(FAKE_PREFIX + 1)) {
-            log.info("시연 시드: 예시 주민 요청은 이미 있어서 건너뛰어요.");
-        } else {
-            seedFakeRequests(refs);
-        }
+        seedFakeRequests(refs);
         resetDemoAccounts(refs);
     }
 
@@ -101,16 +98,28 @@ public class DemoSeeder implements ApplicationRunner {
     }
 
     private void seedFakeRequests(Refs r) {
-        // 구성동 주민 29명: 모두 과일, 1~11번은 반찬, 12~17번은 빵집도 요청
         List<AppUser> guseong = fakeResidents(1, 29, r.guseong());
+        List<AppUser> bojeong = fakeResidents(30, 14, r.bojeong());
+        List<AppUser> mabuk = fakeResidents(44, 9, r.mabuk());
+
+        // 예전 시드 요청은 지우고 지금 숫자로 다시 넣어요(분포를 바꿔도 기존 DB에 반영돼요)
+        List<Long> ids = new ArrayList<>();
+        for (List<AppUser> group : List.of(guseong, bojeong, mabuk)) {
+            group.forEach(u -> ids.add(u.getId()));
+        }
+        em.createQuery("DELETE FROM ShopRequest r WHERE r.user.id IN :ids")
+                .setParameter("ids", ids)
+                .executeUpdate();
+
+        // 구성동 주민 29명: 모두 과일, 1~11번은 반찬, 12~17번은 빵집도 요청
         save(guseong, r.guseong(), r.fruit(), spread(29, 17, 10, 7, 17, 9, 3));
         save(guseong.subList(0, 11), r.guseong(), r.sideDish(), spread(11, 5, 4, 2, 7, 3, 1));
         save(guseong.subList(11, 17), r.guseong(), r.bakery(), spread(6, 2, 2, 0, 3, 2, 1));
         // 보정동 14명: 명세 5-5 예시 그대로(주말이 가장 많아요)
-        save(fakeResidents(30, 14, r.bojeong()), r.bojeong(), r.fruit(), spread(14, 8, 5, 3, 4, 9, 1));
+        save(bojeong, r.bojeong(), r.fruit(), spread(14, 8, 5, 3, 4, 9, 1));
         // 마북동 9명: 평일 낮이 가장 많아요
-        save(fakeResidents(44, 9, r.mabuk()), r.mabuk(), r.fruit(), spread(9, 3, 2, 1, 2, 2, 5));
-        log.info("시연 시드: 예시 주민 52명, 요청 69건을 넣었어요.");
+        save(mabuk, r.mabuk(), r.fruit(), spread(9, 3, 2, 1, 2, 2, 5));
+        log.info("시연 시드: 예시 주민 52명의 요청 69건을 지금 숫자로 맞췄어요.");
     }
 
     /** 시연 계정을 발표 시작 상태로 되돌려요. */
@@ -195,20 +204,23 @@ public class DemoSeeder implements ApplicationRunner {
         }
     }
 
-    /** 예시주민{start}부터 count명. 주민·동네까지 정해 둬요. */
+    /** 예시주민{start}부터 count명. 있으면 그대로 쓰고 없으면 만들어요. 주민·동네도 다시 맞춰요. */
     private List<AppUser> fakeResidents(int start, int count, Long dongId) {
         List<AppUser> users = new ArrayList<>();
         for (int k = start; k < start + count; k++) {
-            AppUser user = new AppUser(FAKE_PREFIX + k);
+            String nickname = FAKE_PREFIX + k;
+            AppUser user = userRepository.findFirstByNicknameOrderByIdAsc(nickname)
+                    .orElseGet(() -> userRepository.save(new AppUser(nickname)));
             user.changeProfile(Role.RESIDENT, dongId);
-            users.add(userRepository.save(user));
+            users.add(user);
         }
         return users;
     }
 
+    /** 시연 계정. 닉네임으로만 찾아요(역할은 resetDemoAccounts 에서 되돌려요). */
     private AppUser demoUser(Role role) {
         String nickname = AuthService.demoNickname(role);
-        return userRepository.findFirstByNicknameAndRoleOrderByIdAsc(nickname, role)
+        return userRepository.findFirstByNicknameOrderByIdAsc(nickname)
                 .orElseGet(() -> {
                     AppUser user = new AppUser(nickname);
                     user.changeProfile(role, null);

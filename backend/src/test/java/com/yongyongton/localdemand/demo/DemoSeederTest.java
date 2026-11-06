@@ -1,10 +1,12 @@
 package com.yongyongton.localdemand.demo;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -90,8 +92,9 @@ class DemoSeederTest {
                 .andExpect(jsonPath("$.areas[*].name", hasItems("구성동", "보정동", "마북동")))
                 .andExpect(jsonPath("$.areas[0].name").value("구성동"))
                 .andExpect(jsonPath("$.areas[0].topTimeSlot").value("WEEKDAY_EVENING"))
-                .andExpect(jsonPath("$.areas[?(@.name == '보정동')].topTimeSlot").value("WEEKEND"))
-                .andExpect(jsonPath("$.areas[?(@.name == '마북동')].topTimeSlot").value("WEEKDAY_DAY"));
+                // 필터 결과는 배열이라 hasItem 으로 봐요
+                .andExpect(jsonPath("$.areas[?(@.name == '보정동')].topTimeSlot", hasItem("WEEKEND")))
+                .andExpect(jsonPath("$.areas[?(@.name == '마북동')].topTimeSlot", hasItem("WEEKDAY_DAY")));
     }
 
     @Test
@@ -143,6 +146,54 @@ class DemoSeederTest {
         mockMvc.perform(get("/api/v1/me/requests").header("Authorization", "Bearer " + resident))
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].category.name").value("반찬가게"));
+    }
+
+    @Test
+    @DisplayName("시연 주민이 역할을 바꿔도 같은 이름 계정이 또 생기지 않아요: 시연 로그인·서버 재시작 모두 같은 계정을 쓰고 역할을 되돌려요")
+    void roleChangeKeepsOneAccount() throws Exception {
+        JsonNode first = login("RESIDENT");
+        long residentId = first.get("user").get("id").asLong();
+        String token = first.get("accessToken").asString();
+
+        mockMvc.perform(put("/api/v1/me").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\": \"OWNER\"}"))
+                .andExpect(status().isOk());
+
+        // 시연 로그인: 같은 계정, 역할은 주민으로
+        JsonNode again = login("RESIDENT");
+        assertThat(again.get("user").get("id").asLong()).isEqualTo(residentId);
+        assertThat(again.get("user").get("role").asString()).isEqualTo("RESIDENT");
+
+        // 서버 재시작(시드 다시): 역할을 또 바꿔 둔 뒤에도 계정은 하나, 주민·구성동으로 돌아와요
+        mockMvc.perform(put("/api/v1/me").header("Authorization", "Bearer " + token)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\": \"FOUNDER\"}"))
+                .andExpect(status().isOk());
+        seeder.run(new DefaultApplicationArguments());
+        Integer residents = jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE nickname = '시연 주민'", Integer.class);
+        assertThat(residents).isEqualTo(1);
+        String role = jdbc.queryForObject("SELECT role FROM app_user WHERE id = ?", String.class, residentId);
+        String admCode = jdbc.queryForObject(
+                "SELECT d.adm_code FROM app_user u JOIN dong d ON u.dong_id = d.id WHERE u.id = ?", String.class, residentId);
+        assertThat(role).isEqualTo("RESIDENT");
+        assertThat(admCode).isEqualTo(DemoSeeder.GUSEONG);
+    }
+
+    @Test
+    @DisplayName("예전 시드가 들어 있던 DB도 서버를 다시 켜면 지금 숫자(빵집 6, 보정동 분포)로 맞춰져요")
+    void refreshesOldSeedData() {
+        // 예전 버전 시드처럼 빵집 요청이 없고 보정동 분포가 다른 상태를 만들어요
+        jdbc.update("DELETE r FROM shop_request r JOIN category c ON r.category_id = c.id"
+                + " JOIN app_user u ON r.user_id = u.id WHERE c.code = 'BAKERY' AND u.nickname LIKE '예시주민%'");
+        jdbc.update("UPDATE shop_request r JOIN dong d ON r.dong_id = d.id SET r.time_slots = 'WEEKDAY_EVENING'"
+                + " WHERE d.adm_code = ?", DemoSeeder.BOJEONG);
+        assertThat(count(DemoSeeder.GUSEONG, "BAKERY")).isZero();
+
+        seeder.run(new DefaultApplicationArguments());
+        assertThat(count(DemoSeeder.GUSEONG, "BAKERY")).isEqualTo(6);
+        assertThat(count(DemoSeeder.BOJEONG, "FRUIT_VEG")).isEqualTo(14);
+        assertThat(like(DemoSeeder.BOJEONG, "time_slots", "WEEKEND")).isEqualTo(9);
+        Integer fakeUsers = jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE nickname LIKE '예시주민%'", Integer.class);
+        assertThat(fakeUsers).isEqualTo(52);
     }
 
     private JsonNode login(String role) throws Exception {
