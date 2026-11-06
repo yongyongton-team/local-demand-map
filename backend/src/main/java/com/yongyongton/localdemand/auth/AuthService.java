@@ -43,16 +43,22 @@ public class AuthService {
             throw new ApiException(ErrorCode.NOT_FOUND);
         }
         String nickname = demoNickname(role);
-        Optional<AppUser> existing = userRepository.findFirstByNicknameAndRoleOrderByIdAsc(nickname, role);
+        // 시연 중에 PUT /me 로 역할을 바꿨어도 같은 계정을 쓰고, 역할만 되돌려요(같은 이름 계정이 또 생기지 않게)
+        Optional<AppUser> existing = userRepository.findFirstByNicknameOrderByIdAsc(nickname);
         if (existing.isPresent()) {
-            return respond(existing.get(), false);
+            AppUser user = existing.get();
+            if (user.getRole() != role) {
+                user.changeProfile(role, user.getDongId());
+            }
+            return respond(user, false);
         }
         AppUser user = new AppUser(nickname);
         user.changeProfile(role, null);
         return respond(userRepository.save(user), true);
     }
 
-    static String demoNickname(Role role) {
+    /** 역할별 시연 계정 닉네임. 시연 시드(demo.DemoSeeder)도 이 이름으로 계정을 만들어요. */
+    public static String demoNickname(Role role) {
         return switch (role) {
             case RESIDENT -> "시연 주민";
             case OWNER -> "시연 사장님";
