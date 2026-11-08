@@ -1,0 +1,24 @@
+# 백엔드(Spring Boot jar)를 서버가 켜질 때 같이 켜고, 꺼지면 5초 뒤 다시 켜요.
+# setup-server.sh 가 /etc/systemd/system/ 에 복사해요.
+[Unit]
+Description=생기면 갈게요 API 서버
+After=network-online.target docker.service
+Wants=network-online.target docker.service
+
+[Service]
+User=app
+Group=app
+WorkingDirectory=/opt/local-demand-map
+EnvironmentFile=/etc/local-demand-map/app.env
+ExecStart=/usr/bin/java -Xms256m -Xmx1g -Duser.timezone=Asia/Seoul -jar /opt/local-demand-map/app.jar
+# MySQL이 아직 안 떴으면 실패하고 다시 켜져요
+Restart=always
+RestartSec=5
+SuccessExitStatus=143
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+
+[Install]
+WantedBy=multi-user.target

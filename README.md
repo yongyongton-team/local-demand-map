@@ -39,6 +39,7 @@ AI는 두 곳에만 써요.
 
 - 백엔드(Spring Boot): [`backend/README.md`](backend/README.md)
 - 프론트·AI: 기술 스택이 정해지면 각 폴더 README에 적어요.
+- 배포(Azure VM 한 대에 화면·API·DB): [`deploy/README.md`](deploy/README.md)
 
 ## 환경변수
 
