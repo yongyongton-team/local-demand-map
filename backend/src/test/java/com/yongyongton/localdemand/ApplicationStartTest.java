@@ -1,5 +1,6 @@
 package com.yongyongton.localdemand;
 
+import static org.hamcrest.Matchers.hasSize;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -54,11 +55,14 @@ class ApplicationStartTest {
 
     @Test
     @WithMockUser
-    @DisplayName("GET /dongs는 행정동 39개를 반환한다")
+    @DisplayName("GET /dongs는 행정동 39개를 반환하고, 항목마다 동 중심 좌표(center)가 있다")
     void dongsReturn39() throws Exception {
         mockMvc.perform(get("/api/v1/dongs"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.length()").value(39));
+                .andExpect(jsonPath("$.length()").value(39))
+                .andExpect(jsonPath("$[*].center.lat", hasSize(39)))
+                .andExpect(jsonPath("$[*].center.lon", hasSize(39)))
+                .andExpect(jsonPath("$[0].center.lat").isNumber());
     }
 
     @Test

@@ -36,6 +36,9 @@ app:
     # 시연용 예시 데이터(시연 계정, 구성동 과일 29명 등). 발표 서버에서만 true. 운영·테스트는 false
     # 켤 때마다 시연 계정을 발표 시작 상태로 되돌려요(서버를 다시 켜면 29 → 30 시연을 반복할 수 있어요)
     enabled: ${DEMO_SEED_ENABLED:false}
+    # true 면 켤 때 손님 계정(예시·시연 계정이 아닌 계정)의 요청·제안·선주문·가게도 지워요. 계정은 남아요
+    # 리허설·결선 직전에 켜서 구성동 과일 29를 지켜요. 평소에는 false(프론트 테스트 데이터가 배포할 때마다 사라지지 않게)
+    reset-guest-data: ${DEMO_RESET_GUEST_DATA:false}
   kakao:
     rest-api-key: ${KAKAO_REST_API_KEY:}
     redirect-uri: ${KAKAO_REDIRECT_URI:}
