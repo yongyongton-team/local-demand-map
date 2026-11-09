@@ -92,7 +92,8 @@ public class LlmAiWriter implements AiWriter {
     private static String purpose(SummaryKind kind) {
         return switch (kind) {
             case OWNER_DEMAND -> "사장님이 이 동네에 찾아가 팔지 정하는 데 도움이 되게 써.";
-            case FOUNDER_REPORT -> "예비 창업자가 이 동네에 가게를 열지 판단하는 데 도움이 되게 써.";
+            case FOUNDER_REPORT -> "예비 창업자가 이 동네에 가게를 열지 판단하는 데 도움이 되게 써. "
+                    + "'인구 구성으로 본 보통 가게 수'가 있으면 '동 안 실제 가게 수'와 견줘서 먼저 말해.";
         };
     }
 

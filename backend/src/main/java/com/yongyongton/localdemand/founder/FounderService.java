@@ -10,6 +10,7 @@ import com.yongyongton.localdemand.common.error.ErrorCode;
 import com.yongyongton.localdemand.dong.Category;
 import com.yongyongton.localdemand.dong.CategoryRepository;
 import com.yongyongton.localdemand.dong.Dong;
+import com.yongyongton.localdemand.dong.DongCategoryEstimateRepository;
 import com.yongyongton.localdemand.dong.DongRepository;
 import com.yongyongton.localdemand.dong.Mart;
 import com.yongyongton.localdemand.dong.Store;
@@ -42,6 +43,12 @@ public class FounderService {
                     "소상공인시장진흥공단 상가(상권)정보", null
             ),
             new FounderReportResponse.Source(
+                    "행정안전부 행정동별 주민등록 인구·세대", "2026-09"
+            ),
+            new FounderReportResponse.Source(
+                    "가게 수 기대치 모델(경기도 행정동 565곳으로 학습, 이 서비스)", null
+            ),
+            new FounderReportResponse.Source(
                     "경기도 용인시 대규모 점포 현황", "2026-05-07"
             ),
             new FounderReportResponse.Source(
@@ -54,6 +61,7 @@ public class FounderService {
 
     private final DongRepository dongRepository;
     private final CategoryRepository categoryRepository;
+    private final DongCategoryEstimateRepository estimateRepository;
     private final EntityManager em;
     private final SummaryService summaryService;
     private final TransactionTemplate readOnly;
@@ -61,12 +69,14 @@ public class FounderService {
     public FounderService(
             DongRepository dongRepository,
             CategoryRepository categoryRepository,
+            DongCategoryEstimateRepository estimateRepository,
             EntityManager em,
             SummaryService summaryService,
             PlatformTransactionManager transactionManager
     ) {
         this.dongRepository = dongRepository;
         this.categoryRepository = categoryRepository;
+        this.estimateRepository = estimateRepository;
         this.em = em;
         this.summaryService = summaryService;
         this.readOnly = new TransactionTemplate(transactionManager);
@@ -246,12 +256,30 @@ public class FounderService {
         );
 
         FounderReportResponse.Stats stats = data.stats();
+        FounderReportResponse.PublicData publicData = data.publicData();
+
+        // 공공데이터 모델을 근거로 쓸 수 있는지. 모델을 믿기 어려운 업종(NOT_JUDGED)은 쓰지 않아요
+        boolean modelEvidence = publicData != null
+                && publicData.verdict().judged();
+        long expectedStores = publicData == null
+                ? 0
+                : Math.round(publicData.expectedCount());
 
         // 2. AI에 전달할 사실 데이터 구성
         Map<String, Object> facts = new LinkedHashMap<>();
 
         facts.put("동네", data.dong().name());
         facts.put("업종", data.category().name());
+
+        if (modelEvidence) {
+            if (publicData.population() != null) {
+                facts.put("주민등록 인구", publicData.population());
+            }
+            facts.put("인구 구성으로 본 보통 가게 수", expectedStores);
+            facts.put("동 안 실제 가게 수", publicData.dongStoreCount());
+            facts.put("공공데이터 판정", publicData.verdictLabel());
+        }
+
         facts.put("주민 요청 수", stats.requestCount());
         facts.put("직선거리 반경(km)", WALK_RADIUS_KM);
         facts.put("반경 내 같은 업종 점포 수", stats.walkStoreCount());
@@ -269,12 +297,37 @@ public class FounderService {
         );
 
         facts.put("많이 선택한 조건", stats.topConditions());
-        facts.put("수령 완료된 제안 수", stats.offers().done());
-        facts.put("실제 수령 수량", stats.offers().orders());
+
+        // 선주문 숫자는 있을 때만 넣어요. 0을 넣으면 AI가 "수령 수량은 0이에요"처럼 어색하게 써요
+        if (stats.offers().done() > 0 || stats.offers().orders() > 0) {
+            facts.put("수령 완료된 제안 수", stats.offers().done());
+            facts.put("실제 수령 수량", stats.offers().orders());
+        }
 
         // 3. AI를 사용할 수 없을 때의 기본 설명
-        StringBuilder template = new StringBuilder()
-                .append(data.dong().name()).append("에서 ")
+        StringBuilder template = new StringBuilder();
+
+        if (modelEvidence) {
+            template.append(KoreanText.josa(
+                    data.dong().name(), "은", "는"
+            ));
+            if (publicData.population() != null) {
+                template.append(" 주민등록 인구 ")
+                        .append(String.format("%,d", publicData.population()))
+                        .append("명의 나이·가구 구성으로 보면 ");
+            } else {
+                template.append(" 인구 구성으로 보면 ");
+            }
+            template.append(KoreanText.josa(
+                            data.category().name(), "이", "가"
+                    ))
+                    .append(" 보통 ").append(expectedStores)
+                    .append("곳 있을 만한데, 동 안에는 ")
+                    .append(publicData.dongStoreCount()).append("곳이에요. ")
+                    .append(publicData.verdictLabel()).append(". ");
+        }
+
+        template.append(data.dong().name()).append("에서 ")
                 .append(KoreanText.josa(
                         data.category().name(), "을", "를"
                 ))
@@ -298,7 +351,9 @@ public class FounderService {
         }
 
         // 4. DB 트랜잭션 밖에서 AI 요약 생성
-        Summary explanation = stats.requestCount() == 0
+        // 주민 요청이 없어도 공공데이터 근거가 있으면 AI가 설명해요. 둘 다 없으면 기본 문장
+        boolean hasEvidence = stats.requestCount() > 0 || modelEvidence;
+        Summary explanation = !hasEvidence
                 ? Summary.template(template.toString())
                 : summaryService.write(
                 SummaryKind.FOUNDER_REPORT,
@@ -313,6 +368,7 @@ public class FounderService {
                 data.dong(),
                 data.category(),
                 stats,
+                publicData,
                 explanation,
                 SOURCES
         );
@@ -325,7 +381,8 @@ public class FounderService {
     private record ReportData(
             FounderReportResponse.DongInfo dong,
             FounderReportResponse.CategoryInfo category,
-            FounderReportResponse.Stats stats
+            FounderReportResponse.Stats stats,
+            FounderReportResponse.PublicData publicData
     ) {
     }
 
@@ -474,7 +531,19 @@ public class FounderService {
                 .setParameter("pickedUp", OrderStatus.PICKED_UP)
                 .getSingleResult();
 
-        // 8. 최종 통계 DTO 구성
+        // 8. 공공데이터 기대치 모델 결과 (V8). 모델 결과가 없는 동네면 null
+        FounderReportResponse.PublicData publicData = estimateRepository
+                .findByDongIdAndCategoryId(dongId, categoryId)
+                .map(estimate -> new FounderReportResponse.PublicData(
+                        dong.getPopulation(),
+                        estimate.getExpectedCount(),
+                        estimate.getDongStoreCount(),
+                        estimate.getVerdict(),
+                        estimate.getVerdict().label()
+                ))
+                .orElse(null);
+
+        // 9. 최종 통계 DTO 구성
         return new ReportData(
                 new FounderReportResponse.DongInfo(
                         dong.getId(),
@@ -496,7 +565,8 @@ public class FounderService {
                                 done,
                                 orders == null ? 0 : orders
                         )
-                )
+                ),
+                publicData
         );
     }
 }

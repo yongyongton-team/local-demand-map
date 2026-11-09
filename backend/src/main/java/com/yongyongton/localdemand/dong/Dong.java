@@ -35,6 +35,10 @@ public class Dong {
     @Column(name = "boundary", columnDefinition = "LONGTEXT")
     private String boundary;
 
+    /** 주민등록 인구(2026-09, V8). 모르면 null. */
+    @Column(name = "population")
+    private Integer population;
+
     protected Dong() {
     }
 
@@ -64,5 +68,9 @@ public class Dong {
 
     public String getBoundary() {
         return boundary;
+    }
+
+    public Integer getPopulation() {
+        return population;
     }
 }

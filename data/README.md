@@ -59,6 +59,12 @@ python3 marts.py ../demo/data.json <좌표 csv 출력 경로> <마트 결과 jso
 ```
 
 - `geocode_marts.py`: 대규모 점포 주소로 좌표를 찾아요(Nominatim, 1초에 1번). 이미 찾은 결과가 `yongin/대형마트_좌표.csv`라서 다시 돌릴 필요는 없어요.
+- `estimate_sql.py`: `results/yongin_dong_category_gap.csv` 전체(1,482쌍)와 동별 인구를 서버 DB 시드(`V8__seed_dong_category_estimate.sql`)로 만들어요. 창업자 리포트가 "인구 구성으로 보면 보통 몇 곳인데 동 안에는 몇 곳"을 근거로 써요. 결과 CSV가 바뀌면 다시 돌려요. 이미 배포된 V8은 고치지 말고 새 번호로 넣어요.
+
+```bash
+python3 estimate_sql.py ../results/yongin_dong_category_gap.csv \
+  ../../backend/src/main/resources/db/migration/V8__seed_dong_category_estimate.sql
+```
 - `data.json`을 만든 스크립트는 데모 때 따로 썼고 남아 있지 않아요. 서버에 넣을 CSV는 `data.json`과 `results/`에서 다시 뽑아요.
 
 ## 한계
