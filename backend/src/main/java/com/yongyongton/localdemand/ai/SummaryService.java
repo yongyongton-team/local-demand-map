@@ -26,7 +26,7 @@ import tools.jackson.databind.ObjectMapper;
 public class SummaryService {
 
     /** 지시문을 바꾸면 이 값을 올려요. 옛 지시문으로 쓴 저장 문장을 다시 쓰지 않게 돼요. */
-    static final String PROMPT_VERSION = "v1";
+    static final String PROMPT_VERSION = "v2";
 
     private static final Logger log = LoggerFactory.getLogger(SummaryService.class);
 
