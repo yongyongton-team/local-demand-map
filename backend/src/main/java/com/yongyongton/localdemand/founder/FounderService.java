@@ -10,6 +10,7 @@ import com.yongyongton.localdemand.common.error.ErrorCode;
 import com.yongyongton.localdemand.dong.Category;
 import com.yongyongton.localdemand.dong.CategoryRepository;
 import com.yongyongton.localdemand.dong.Dong;
+import com.yongyongton.localdemand.dong.DongCategoryEstimate;
 import com.yongyongton.localdemand.dong.DongCategoryEstimateRepository;
 import com.yongyongton.localdemand.dong.DongRepository;
 import com.yongyongton.localdemand.dong.Mart;
@@ -86,6 +87,7 @@ public class FounderService {
     // =====================================================
     // 1. 예비 창업자 입지 순위 API
     // GET /founder/rankings
+    // 요청이 없는 업종도 공공데이터로 가게가 부족한 동네를 먼저 보여 줘요
     // =====================================================
 
     @Transactional(readOnly = true)
@@ -143,9 +145,15 @@ public class FounderService {
                 Mart.class
         ).getResultList();
 
-        // 6. 행정동별 점수 계산
-        List<FounderRankingResponse.RankingItem> candidates =
-                new ArrayList<>();
+        // 6. 공공데이터 기대치 모델 결과 (V8). 업종마다 39개 동이 다 있어요
+        Map<Long, DongCategoryEstimate> estimates = new HashMap<>();
+
+        for (DongCategoryEstimate estimate : estimateRepository.findByCategoryId(categoryId)) {
+            estimates.put(estimate.getDongId(), estimate);
+        }
+
+        // 7. 행정동별 값 모으기
+        List<Candidate> candidates = new ArrayList<>();
 
         for (Dong dong : dongs) {
 
@@ -171,7 +179,7 @@ public class FounderService {
                 }
             }
 
-            // 기본 점수
+            // 예전 점수. 이제는 동점 정리에만 써요
             double score = requestCount - 3.0 * storeCount;
 
             // 식품 업종 + 대형마트 1.5km 이내
@@ -182,55 +190,37 @@ public class FounderService {
                 score *= 0.5;
             }
 
-            candidates.add(
-                    new FounderRankingResponse.RankingItem(
-                            0,
-                            dong.getId(),
-                            dong.getName(),
-                            requestCount,
-                            storeCount,
-                            nearestMartKm == null
-                                    ? null
-                                    : Geo.round1(nearestMartKm),
-                            score
-                    )
-            );
+            candidates.add(new Candidate(
+                    dong,
+                    requestCount,
+                    storeCount,
+                    nearestMartKm == null ? null : Geo.round1(nearestMartKm),
+                    score,
+                    estimates.get(dong.getId())
+            ));
         }
 
-        // 7. 점수 내림차순 정렬
-        candidates.sort(
-                Comparator
-                        .<FounderRankingResponse.RankingItem>comparingDouble(
-                                FounderRankingResponse.RankingItem::score
-                        )
-                        .reversed()
-                        .thenComparing(
-                                Comparator.comparingLong(
-                                        FounderRankingResponse.RankingItem::requestCount
-                                ).reversed()
-                        )
-                        .thenComparing(
-                                FounderRankingResponse.RankingItem::dongId
-                        )
-        );
+        // 8. 데이터 부족 판정 → 요청 수 → 부족이 뚜렷한 순 → 예전 점수 → 동 id
+        candidates.sort(RANKING_ORDER);
 
-        // 8. limit 적용 및 순위 부여
+        // 9. limit 적용 및 순위 부여
         List<FounderRankingResponse.RankingItem> items =
                 new ArrayList<>();
 
         int size = Math.min(limit, candidates.size());
 
         for (int i = 0; i < size; i++) {
-            FounderRankingResponse.RankingItem item = candidates.get(i);
+            Candidate c = candidates.get(i);
 
             items.add(new FounderRankingResponse.RankingItem(
                     i + 1,
-                    item.dongId(),
-                    item.name(),
-                    item.requestCount(),
-                    item.sameCategoryStoreCount(),
-                    item.nearestMartKm(),
-                    item.score()
+                    c.dong().getId(),
+                    c.dong().getName(),
+                    c.requestCount(),
+                    c.storeCount(),
+                    c.nearestMartKm(),
+                    c.score(),
+                    toPublicData(c.dong(), c.estimate())
             ));
         }
 
@@ -240,6 +230,63 @@ public class FounderService {
                         category.getName()
                 ),
                 items
+        );
+    }
+
+    /** 순위를 매기기 전 동 하나의 값. estimate 는 모델 결과가 없으면 null 이에요. */
+    private record Candidate(
+            Dong dong,
+            long requestCount,
+            long storeCount,
+            Double nearestMartKm,
+            double score,
+            DongCategoryEstimate estimate
+    ) {
+
+        /** 공공데이터 부족 판정 단계. 클수록 위예요. 모델을 믿기 어려운 업종(NOT_JUDGED)은 0이에요 */
+        int shortageLevel() {
+            if (estimate == null) {
+                return 0;
+            }
+            return switch (estimate.getVerdict()) {
+                case SHORT -> 3;
+                case SOME_NEARBY -> 2;
+                case NEXT_DONG -> 1;
+                case NOT_SHORT, NOT_JUDGED -> 0;
+            };
+        }
+
+        /**
+         * 기대치가 맞다면 실제 가게 수가 이만큼 적을 확률(prob_fewer). 작을수록 부족이 뚜렷해요.
+         * 기대치가 작은 동네에서 0곳인 것을 "부족"으로 올리지 않으려고 비율 대신 이 값을 써요.
+         * 판정하지 않은 업종은 비교하지 않아요(모두 1).
+         */
+        double shortageProbability() {
+            return estimate != null && estimate.getVerdict().judged()
+                    ? estimate.getProbFewer()
+                    : 1.0;
+        }
+    }
+
+    /** 데이터 부족 판정 → 주민 요청 수 → 부족이 뚜렷한 순 → 예전 점수 → 동 id */
+    private static final Comparator<Candidate> RANKING_ORDER = Comparator
+            .<Candidate>comparingInt(Candidate::shortageLevel).reversed()
+            .thenComparing(Comparator.<Candidate>comparingLong(Candidate::requestCount).reversed())
+            .thenComparingDouble(Candidate::shortageProbability)
+            .thenComparing(Comparator.<Candidate>comparingDouble(Candidate::score).reversed())
+            .thenComparing(c -> c.dong().getId());
+
+    /** 순위와 리포트가 같은 모양으로 쓰는 공공데이터 근거. 모델 결과가 없으면 null */
+    private static FounderReportResponse.PublicData toPublicData(Dong dong, DongCategoryEstimate estimate) {
+        if (estimate == null) {
+            return null;
+        }
+        return new FounderReportResponse.PublicData(
+                dong.getPopulation(),
+                estimate.getExpectedCount(),
+                estimate.getDongStoreCount(),
+                estimate.getVerdict(),
+                estimate.getVerdict().label()
         );
     }
 
@@ -532,16 +579,10 @@ public class FounderService {
                 .getSingleResult();
 
         // 8. 공공데이터 기대치 모델 결과 (V8). 모델 결과가 없는 동네면 null
-        FounderReportResponse.PublicData publicData = estimateRepository
-                .findByDongIdAndCategoryId(dongId, categoryId)
-                .map(estimate -> new FounderReportResponse.PublicData(
-                        dong.getPopulation(),
-                        estimate.getExpectedCount(),
-                        estimate.getDongStoreCount(),
-                        estimate.getVerdict(),
-                        estimate.getVerdict().label()
-                ))
-                .orElse(null);
+        FounderReportResponse.PublicData publicData = toPublicData(
+                dong,
+                estimateRepository.findByDongIdAndCategoryId(dongId, categoryId).orElse(null)
+        );
 
         // 9. 최종 통계 DTO 구성
         return new ReportData(
