@@ -101,7 +101,8 @@ cd backend
 | `DB_USERNAME`, `DB_PASSWORD` | DB 계정 | `local_demand` |
 | `CORS_ALLOWED_ORIGINS` | 프론트 주소(쉼표로 구분) | `http://localhost:5173,http://localhost:3000` |
 | `DEMO_LOGIN_ENABLED` | 시연용 로그인 켜기 | true |
-| `DEMO_SEED_ENABLED` | 시연용 예시 데이터 넣기(발표 서버에서만 true) | false |
+| `DEMO_SEED_ENABLED` | 시연용 예시 데이터 넣기(발표 서버에서만 true). 켤 때마다 시연 계정·예시 요청·예시 선주문 제안을 처음 상태로 | false |
+| `DEMO_RESET_GUEST_DATA` | `DEMO_SEED_ENABLED=true`일 때 손님 계정의 요청·제안·선주문·가게도 지우기(계정은 남음). 리허설·결선 직전에만 true | false |
 | `KAKAO_REST_API_KEY`, `KAKAO_REDIRECT_URI` | 카카오 로그인(MVP에서는 안 씀) | 없음 |
 | `AI_PROVIDER` | `fake`(AI 없이 낱말 맞추기) 또는 `openai` | fake |
 | `AI_API_KEY` | OpenAI 키 | 없음 |

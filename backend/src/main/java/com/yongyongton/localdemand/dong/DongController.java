@@ -27,7 +27,8 @@ public class DongController {
                 .map(dong -> new DongResponse(
                         dong.getId(),
                         dong.getName(),
-                        dong.getGu()
+                        dong.getGu(),
+                        new DongMapResponse.Center(dong.getCenterLat(), dong.getCenterLon())
                 ))
                 .toList();
     }
@@ -41,7 +42,8 @@ public class DongController {
         return dongService.getGapResponses(dongId, userId);
     }
 
-    public record DongResponse(Long id, String name, String gu) {
+    /** center 는 /dongs/{dongId}/map 의 dong.center 와 같은 값·모양이에요(창업자 지도처럼 동 위치만 필요할 때). */
+    public record DongResponse(Long id, String name, String gu, DongMapResponse.Center center) {
     }
 
     @GetMapping("/dongs/{dongId}/map")

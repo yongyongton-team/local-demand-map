@@ -7,19 +7,25 @@ import com.yongyongton.localdemand.auth.DongLocator;
 import com.yongyongton.localdemand.auth.OwnerShop;
 import com.yongyongton.localdemand.auth.OwnerShopRepository;
 import com.yongyongton.localdemand.auth.Role;
+import com.yongyongton.localdemand.common.KstTime;
 import com.yongyongton.localdemand.dong.Category;
 import com.yongyongton.localdemand.dong.Dong;
+import com.yongyongton.localdemand.offer.Offer;
+import com.yongyongton.localdemand.offer.PreOrder;
 import com.yongyongton.localdemand.request.Frequency;
 import com.yongyongton.localdemand.request.RequestCondition;
 import com.yongyongton.localdemand.request.ShopRequest;
 import com.yongyongton.localdemand.request.ShopRequestRepository;
 import com.yongyongton.localdemand.request.TimeSlot;
 import jakarta.persistence.EntityManager;
+import java.time.LocalDateTime;
+import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationArguments;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
@@ -44,7 +50,18 @@ import org.springframework.transaction.annotation.Transactional;
  *   <li>시연 사장님: 싱싱과일(과일·채소) 가게를 마북동 지점으로 되돌리고, 만든 제안·그 선주문을 지워요</li>
  *   <li>시연 창업자: 역할만 되돌려요</li>
  * </ul>
- * 계정은 닉네임으로만 찾아요(시연 중에 역할을 바꿔도 같은 계정을 다시 쓰고 역할을 되돌려요). 다른 손님 계정의 데이터는 건드리지 않아요.
+ * 계정은 닉네임으로만 찾아요(시연 중에 역할을 바꿔도 같은 계정을 다시 쓰고 역할을 되돌려요).
+ *
+ * <p><b>3. 예시 선주문 제안</b>(켤 때마다 지우고 다시 만들어요 → 마감 시각이 늘 서버를 켠 때 기준이에요).
+ * <ul>
+ *   <li>예시 반찬가게(오늘반찬)의 구성동 반찬 제안 1건(OPEN): 시연 주민의 반찬 요청에 보여요. 시연 주민은 아직 선주문하지 않았어요</li>
+ *   <li>시연 사장님 제안 2건: 보정동 과일 OPEN, 마북동 과일 CONFIRMED(마감이 지났고 최소 주문 수를 채움)</li>
+ *   <li>구성동 과일은 비워 둬요. 발표 때 시연 사장님이 직접 제안하는 장면이에요</li>
+ * </ul>
+ *
+ * <p><b>4. 손님 데이터 지우기</b>(DEMO_RESET_GUEST_DATA=true 일 때만). 예시 주민·예시 사장님·시연 계정이 아닌 계정이 만든
+ * 요청·제안·선주문·가게를 지워요. 계정 자체는 남겨요. 리허설·결선 직전에 켜서 구성동 과일 29를 지켜요.
+ * 꺼져 있으면 다른 손님 계정의 데이터는 건드리지 않아요.
  *
  * <p>동·업종 데이터(V3·V4)가 없으면 서버가 켜지지 않게 멈춰요. 시연 서버에서 빈 화면으로 발표하는 일을 막으려고요.
  */
@@ -53,6 +70,9 @@ import org.springframework.transaction.annotation.Transactional;
 public class DemoSeeder implements ApplicationRunner {
 
     static final String FAKE_PREFIX = "예시주민";
+    /** 예시 반찬가게 사장님. 시연 주민의 반찬 요청에 제안을 보여 주려고 만들어요. */
+    static final String FAKE_OWNER = "예시사장님";
+    static final String FAKE_SHOP = "오늘반찬";
 
     static final String GUSEONG = "4146356000";   // 구성동
     static final String BOJEONG = "4146359000";   // 보정동
@@ -62,6 +82,10 @@ public class DemoSeeder implements ApplicationRunner {
     static final double SHOP_LAT = 37.3108;
     static final double SHOP_LON = 127.1398;
 
+    /** 예시 반찬가게 위치. 구성동 중심(37.2935, 127.1325)에서 약 200m. */
+    static final double FAKE_SHOP_LAT = 37.2950;
+    static final double FAKE_SHOP_LON = 127.1335;
+
     private static final Logger log = LoggerFactory.getLogger(DemoSeeder.class);
 
     private final AppUserRepository userRepository;
@@ -69,26 +93,55 @@ public class DemoSeeder implements ApplicationRunner {
     private final ShopRequestRepository requestRepository;
     private final DongLocator dongLocator;
     private final EntityManager em;
+    private final boolean resetGuestData;
 
     public DemoSeeder(AppUserRepository userRepository, OwnerShopRepository ownerShopRepository,
-                      ShopRequestRepository requestRepository, DongLocator dongLocator, EntityManager em) {
+                      ShopRequestRepository requestRepository, DongLocator dongLocator, EntityManager em,
+                      @Value("${app.demo-seed.reset-guest-data:false}") boolean resetGuestData) {
         this.userRepository = userRepository;
         this.ownerShopRepository = ownerShopRepository;
         this.requestRepository = requestRepository;
         this.dongLocator = dongLocator;
         this.em = em;
+        this.resetGuestData = resetGuestData;
     }
 
     /** 시드가 쓰는 동·업종 id. */
     record Refs(Long guseong, Long bojeong, Long mabuk, Long fruit, Long sideDish, Long bakery) {
     }
 
+    /** 예시 주민(동별). 선주문 시드에도 써요. */
+    record FakeResidents(List<AppUser> guseong, List<AppUser> bojeong, List<AppUser> mabuk) {
+
+        List<Long> ids() {
+            List<Long> ids = new ArrayList<>();
+            for (List<AppUser> group : List.of(guseong, bojeong, mabuk)) {
+                group.forEach(u -> ids.add(u.getId()));
+            }
+            return ids;
+        }
+    }
+
+    /** 시연 계정 3개와 예시 반찬가게 사장님. */
+    record DemoUsers(AppUser resident, AppUser owner, AppUser founder, AppUser fakeOwner) {
+    }
+
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
+        seed(resetGuestData);
+    }
+
+    /** 서버를 켤 때와 같은 일을 해요. 테스트에서 손님 데이터 지우기를 켜고 끄려고 따로 뒀어요. */
+    @Transactional
+    public void seed(boolean clearGuestData) {
         Refs refs = loadRefs();
-        seedFakeRequests(refs);
-        resetDemoAccounts(refs);
+        FakeResidents fakes = seedFakeRequests(refs);
+        DemoUsers demo = resetDemoAccounts(refs, fakes);
+        if (clearGuestData) {
+            clearGuestData(fakes, demo);
+        }
+        seedOffers(refs, fakes, demo);
     }
 
     /** 동·업종이 없으면 멈춰요(V3·V4 마이그레이션이 안 돌았거나 코드가 바뀐 경우). */
@@ -97,18 +150,16 @@ public class DemoSeeder implements ApplicationRunner {
                 category("FRUIT_VEG"), category("SIDE_DISH"), category("BAKERY"));
     }
 
-    private void seedFakeRequests(Refs r) {
+    private FakeResidents seedFakeRequests(Refs r) {
         List<AppUser> guseong = fakeResidents(1, 29, r.guseong());
         List<AppUser> bojeong = fakeResidents(30, 14, r.bojeong());
         List<AppUser> mabuk = fakeResidents(44, 9, r.mabuk());
 
+        FakeResidents fakes = new FakeResidents(guseong, bojeong, mabuk);
+
         // 예전 시드 요청은 지우고 지금 숫자로 다시 넣어요(분포를 바꿔도 기존 DB에 반영돼요)
-        List<Long> ids = new ArrayList<>();
-        for (List<AppUser> group : List.of(guseong, bojeong, mabuk)) {
-            group.forEach(u -> ids.add(u.getId()));
-        }
         em.createQuery("DELETE FROM ShopRequest r WHERE r.user.id IN :ids")
-                .setParameter("ids", ids)
+                .setParameter("ids", fakes.ids())
                 .executeUpdate();
 
         // 구성동 주민 29명: 모두 과일, 1~11번은 반찬, 12~17번은 빵집도 요청
@@ -120,21 +171,26 @@ public class DemoSeeder implements ApplicationRunner {
         // 마북동 9명: 평일 낮이 가장 많아요
         save(mabuk, r.mabuk(), r.fruit(), spread(9, 3, 2, 1, 2, 2, 5));
         log.info("시연 시드: 예시 주민 52명의 요청 69건을 지금 숫자로 맞췄어요.");
+        return fakes;
     }
 
-    /** 시연 계정을 발표 시작 상태로 되돌려요. */
-    private void resetDemoAccounts(Refs r) {
+    /** 시연 계정을 발표 시작 상태로 되돌려요. 예시 선주문(예시 주민의 선주문, 시연·예시 사장님 제안)도 지워요. */
+    private DemoUsers resetDemoAccounts(Refs r, FakeResidents fakes) {
         AppUser resident = demoUser(Role.RESIDENT);
         AppUser owner = demoUser(Role.OWNER);
         AppUser founder = demoUser(Role.FOUNDER);
+        AppUser fakeOwner = fakeOwner();
 
-        em.createQuery("DELETE FROM PreOrder p WHERE p.user.id = :resident"
-                        + " OR p.offer.id IN (SELECT o.id FROM Offer o WHERE o.owner.id = :owner)")
-                .setParameter("resident", resident.getId())
-                .setParameter("owner", owner.getId())
+        List<Long> owners = List.of(owner.getId(), fakeOwner.getId());
+        List<Long> orderers = new ArrayList<>(fakes.ids());
+        orderers.add(resident.getId());
+        em.createQuery("DELETE FROM PreOrder p WHERE p.user.id IN :orderers"
+                        + " OR p.offer.id IN (SELECT o.id FROM Offer o WHERE o.owner.id IN :owners)")
+                .setParameter("orderers", orderers)
+                .setParameter("owners", owners)
                 .executeUpdate();
-        em.createQuery("DELETE FROM Offer o WHERE o.owner.id = :owner")
-                .setParameter("owner", owner.getId())
+        em.createQuery("DELETE FROM Offer o WHERE o.owner.id IN :owners")
+                .setParameter("owners", owners)
                 .executeUpdate();
         em.createQuery("DELETE FROM ShopRequest r WHERE r.user.id = :resident")
                 .setParameter("resident", resident.getId())
@@ -155,7 +211,81 @@ public class DemoSeeder implements ApplicationRunner {
         }
 
         founder.changeProfile(Role.FOUNDER, null);
+
+        fakeOwner.changeProfile(Role.OWNER, null);
+        Long fakeShopDongId = dongLocator.findDongId(FAKE_SHOP_LAT, FAKE_SHOP_LON).orElse(r.guseong());
+        OwnerShop fakeShop = ownerShopRepository.findByUserId(fakeOwner.getId()).orElse(null);
+        if (fakeShop == null) {
+            ownerShopRepository.save(new OwnerShop(fakeOwner, FAKE_SHOP, r.sideDish(),
+                    FAKE_SHOP_LAT, FAKE_SHOP_LON, fakeShopDongId));
+        } else {
+            fakeShop.update(FAKE_SHOP, r.sideDish(), FAKE_SHOP_LAT, FAKE_SHOP_LON, fakeShopDongId);
+        }
         log.info("시연 시드: 시연 계정 3개를 발표 시작 상태로 되돌렸어요.");
+        return new DemoUsers(resident, owner, founder, fakeOwner);
+    }
+
+    /**
+     * 예시 선주문 제안 3건. 마감·수령 시각은 지금(KST) 기준이라 서버를 다시 켜면 다시 미래로 맞춰져요.
+     * 상태는 저장하지 않고 읽을 때 계산해요(OPEN 이고 마감이 지났으면 주문 수에 따라 CONFIRMED / CLOSED).
+     */
+    private void seedOffers(Refs r, FakeResidents fakes, DemoUsers demo) {
+        LocalDateTime now = LocalDateTime.now(KstTime.ZONE).truncatedTo(ChronoUnit.HOURS);
+
+        // 시연 주민의 반찬 요청에 보이는 제안. 예시 주민 4명이 선주문했고 시연 주민은 아직이에요(myOrder = null)
+        Offer sideDish = persist(new Offer(demo.fakeOwner(), r.guseong(), r.sideDish(), "저녁 반찬 4종 세트",
+                "그날 만든 반찬 4종을 한 팩에 담아 드려요", 12000,
+                atHour(now.plusDays(3), 19), "구성동 행정복지센터 앞", 10, atHour(now.plusDays(2), 21)));
+        order(sideDish, fakes.guseong().subList(0, 4));
+
+        // 시연 사장님: 마감이 지났고 최소 주문 수를 채운 제안(CONFIRMED). 먼저 만들어서 목록에서 아래에 와요
+        Offer confirmed = persist(new Offer(demo.owner(), r.mabuk(), r.fruit(), "과일 한 상자",
+                "제철 과일을 골라 한 상자로 담아 드려요", 20000,
+                atHour(now.plusDays(1), 11), "싱싱과일 마북점", 5, atHour(now.minusDays(1), 21)));
+        order(confirmed, fakes.mabuk().subList(0, 6));
+
+        // 시연 사장님: 모집 중인 제안(OPEN)
+        Offer open = persist(new Offer(demo.owner(), r.bojeong(), r.fruit(), "제철 과일 꾸러미",
+                "낱개로도 담아 드려요", 15000,
+                atHour(now.plusDays(3), 18), "보정동 카페거리 입구", 10, atHour(now.plusDays(2), 21)));
+        order(open, fakes.bojeong().subList(0, 6));
+
+        log.info("시연 시드: 예시 선주문 제안 3건을 만들었어요.");
+    }
+
+    private Offer persist(Offer offer) {
+        em.persist(offer);
+        return offer;
+    }
+
+    private void order(Offer offer, List<AppUser> users) {
+        users.forEach(u -> em.persist(new PreOrder(offer, u, 1)));
+    }
+
+    private static LocalDateTime atHour(LocalDateTime day, int hour) {
+        return day.withHour(hour).withMinute(0).withSecond(0).withNano(0);
+    }
+
+    /**
+     * 손님 데이터 지우기. 예시 주민·예시 사장님·시연 계정이 아닌 계정의 선주문·제안·요청·가게를 지워요.
+     * 손님이 만든 제안에 예시 주민이 선주문한 것은 없지만(시드만 선주문해요), 손님 제안에 걸린 선주문은 누구 것이든 같이 지워요.
+     */
+    private void clearGuestData(FakeResidents fakes, DemoUsers demo) {
+        List<Long> kept = new ArrayList<>(fakes.ids());
+        kept.addAll(List.of(demo.resident().getId(), demo.owner().getId(), demo.founder().getId(),
+                demo.fakeOwner().getId()));
+
+        int orders = em.createQuery("DELETE FROM PreOrder p WHERE p.user.id NOT IN :kept"
+                        + " OR p.offer.id IN (SELECT o.id FROM Offer o WHERE o.owner.id NOT IN :kept)")
+                .setParameter("kept", kept).executeUpdate();
+        int offers = em.createQuery("DELETE FROM Offer o WHERE o.owner.id NOT IN :kept")
+                .setParameter("kept", kept).executeUpdate();
+        int requests = em.createQuery("DELETE FROM ShopRequest r WHERE r.user.id NOT IN :kept")
+                .setParameter("kept", kept).executeUpdate();
+        int shops = em.createQuery("DELETE FROM OwnerShop s WHERE s.user.id NOT IN :kept")
+                .setParameter("kept", kept).executeUpdate();
+        log.info("시연 시드: 손님 데이터를 지웠어요 (요청 {}건, 제안 {}건, 선주문 {}건, 가게 {}곳).",
+                requests, offers, orders, shops);
     }
 
     /** 요청 한 건의 조건·시간대·빈도. */
@@ -215,6 +345,16 @@ public class DemoSeeder implements ApplicationRunner {
             users.add(user);
         }
         return users;
+    }
+
+    /** 예시 반찬가게 사장님. 없으면 만들어요. */
+    private AppUser fakeOwner() {
+        return userRepository.findFirstByNicknameOrderByIdAsc(FAKE_OWNER)
+                .orElseGet(() -> {
+                    AppUser user = new AppUser(FAKE_OWNER);
+                    user.changeProfile(Role.OWNER, null);
+                    return userRepository.save(user);
+                });
     }
 
     /** 시연 계정. 닉네임으로만 찾아요(역할은 resetDemoAccounts 에서 되돌려요). */

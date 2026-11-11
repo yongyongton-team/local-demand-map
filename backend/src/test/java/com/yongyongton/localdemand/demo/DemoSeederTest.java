@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.hasSize;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
@@ -136,13 +137,16 @@ class DemoSeederTest {
                         .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\": 1}"))
                 .andExpect(status().isCreated());
 
-        // 서버를 다시 켠 것처럼 시드를 다시 돌리면 발표 시작 상태로 돌아와요
+        // 서버를 다시 켠 것처럼 시드를 다시 돌리면 발표 시작 상태로 돌아와요(시연 사장님 제안은 예시 2건만, 구성동 과일은 없음)
         seeder.run(new DefaultApplicationArguments());
         assertThat(count(DemoSeeder.GUSEONG, "FRUIT_VEG")).isEqualTo(29);
         Integer offers = jdbc.queryForObject("""
                 SELECT COUNT(*) FROM offer o JOIN app_user u ON o.owner_id = u.id WHERE u.nickname = '시연 사장님'""",
                 Integer.class);
-        assertThat(offers).isZero();
+        assertThat(offers).isEqualTo(2);
+        Integer guseongFruitOffers = jdbc.queryForObject("SELECT COUNT(*) FROM offer WHERE dong_id = ? AND category_id = ?",
+                Integer.class, dongId, fruitId);
+        assertThat(guseongFruitOffers).isZero();
         mockMvc.perform(get("/api/v1/me/requests").header("Authorization", "Bearer " + resident))
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].category.name").value("반찬가게"));
@@ -194,6 +198,116 @@ class DemoSeederTest {
         assertThat(like(DemoSeeder.BOJEONG, "time_slots", "WEEKEND")).isEqualTo(9);
         Integer fakeUsers = jdbc.queryForObject("SELECT COUNT(*) FROM app_user WHERE nickname LIKE '예시주민%'", Integer.class);
         assertThat(fakeUsers).isEqualTo(52);
+    }
+
+    @Test
+    @DisplayName("예시 선주문: 시연 주민의 반찬 요청에 제안 1건(OPEN, 아직 선주문 안 함), 시연 사장님 제안 2건(보정동 OPEN, 마북동 CONFIRMED). 다시 켜도 안 늘어나요")
+    void seededOffers() throws Exception {
+        String resident = token("RESIDENT");
+        mockMvc.perform(get("/api/v1/me/requests").header("Authorization", "Bearer " + resident))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$[0].category.name").value("반찬가게"))
+                .andExpect(jsonPath("$[0].offers", hasSize(1)))
+                .andExpect(jsonPath("$[0].offers[0].shopName").value(DemoSeeder.FAKE_SHOP))
+                .andExpect(jsonPath("$[0].offers[0].status").value("OPEN"))
+                .andExpect(jsonPath("$[0].offers[0].orderCount").value(4))
+                .andExpect(jsonPath("$[0].offers[0].minOrders").value(10))
+                .andExpect(jsonPath("$[0].offers[0].myOrder").value(nullValue()));
+
+        String owner = token("OWNER");
+        mockMvc.perform(get("/api/v1/owner/offers").header("Authorization", "Bearer " + owner))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$", hasSize(2)))
+                .andExpect(jsonPath("$[0].dong.name").value("보정동"))
+                .andExpect(jsonPath("$[0].status").value("OPEN"))
+                .andExpect(jsonPath("$[0].orderCount").value(6))
+                .andExpect(jsonPath("$[1].dong.name").value("마북동"))
+                .andExpect(jsonPath("$[1].status").value("CONFIRMED"))
+                .andExpect(jsonPath("$[1].orderCount").value(6));
+
+        seeder.run(new DefaultApplicationArguments());
+        Integer offers = jdbc.queryForObject("""
+                SELECT COUNT(*) FROM offer o JOIN app_user u ON o.owner_id = u.id
+                WHERE u.nickname IN ('시연 사장님', ?)""", Integer.class, DemoSeeder.FAKE_OWNER);
+        assertThat(offers).isEqualTo(3);
+        assertThat(rows("SELECT COUNT(*) FROM pre_order p JOIN app_user u ON p.user_id = u.id WHERE u.nickname LIKE ?",
+                "예시주민%")).isEqualTo(16);
+    }
+
+    @Test
+    @DisplayName("손님 데이터 지우기: 꺼 두면 손님 요청이 남아 30이 되고, 켜면 손님의 요청·제안·선주문·가게를 지워 29로 돌아와요. 손님 계정과 예시 데이터는 남아요")
+    void clearGuestData() throws Exception {
+        long guseong = jdbc.queryForObject("SELECT id FROM dong WHERE adm_code = ?", Long.class, DemoSeeder.GUSEONG);
+        Long fruitId = jdbc.queryForObject("SELECT id FROM category WHERE code = 'FRUIT_VEG'", Long.class);
+        Long sideDishId = jdbc.queryForObject("SELECT id FROM category WHERE code = 'SIDE_DISH'", Long.class);
+
+        // 손님 주민이 구성동 과일을 요청해서 30이 돼요
+        JsonNode guestResident = guest();
+        String residentToken = guestResident.get("accessToken").asString();
+        long guestResidentId = guestResident.get("user").get("id").asLong();
+        mockMvc.perform(put("/api/v1/me").header("Authorization", "Bearer " + residentToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"role\": \"RESIDENT\", \"dongId\": " + guseong + "}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(post("/api/v1/requests").header("Authorization", "Bearer " + residentToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dongId\": " + guseong + ", \"categoryId\": " + fruitId
+                                + ", \"timeSlots\": [\"WEEKEND\"], \"frequency\": \"SOMETIMES\"}"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.count").value(30));
+
+        // 손님 사장님이 가게를 등록하고 구성동 반찬 제안을 만들고, 손님 주민이 선주문해요
+        String ownerToken = guest().get("accessToken").asString();
+        mockMvc.perform(put("/api/v1/me").header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"role\": \"OWNER\"}"))
+                .andExpect(status().isOk());
+        mockMvc.perform(put("/api/v1/me/shop").header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"shopName\": \"손님반찬\", \"categoryId\": " + sideDishId
+                                + ", \"lat\": 37.2935, \"lon\": 127.1325}"))
+                .andExpect(status().isOk());
+        OffsetDateTime base = OffsetDateTime.now(ZoneId.of("Asia/Seoul")).truncatedTo(ChronoUnit.SECONDS);
+        String offer = mockMvc.perform(post("/api/v1/offers").header("Authorization", "Bearer " + ownerToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"dongId\": " + guseong + ", \"categoryId\": " + sideDishId
+                                + ", \"title\": \"반찬 세트\", \"price\": 10000, \"pickupAt\": \"" + base.plusDays(2)
+                                + "\", \"pickupPlace\": \"구성동\", \"minOrders\": 5, \"deadlineAt\": \""
+                                + base.plusDays(1) + "\"}"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        long offerId = objectMapper.readTree(offer).get("offer").get("id").asLong();
+        mockMvc.perform(post("/api/v1/offers/" + offerId + "/orders").header("Authorization", "Bearer " + residentToken)
+                        .contentType(MediaType.APPLICATION_JSON).content("{\"quantity\": 1}"))
+                .andExpect(status().isCreated());
+
+        // 꺼 두면(기본) 손님 데이터는 그대로예요
+        seeder.seed(false);
+        assertThat(count(DemoSeeder.GUSEONG, "FRUIT_VEG")).isEqualTo(30);
+        assertThat(rows("SELECT COUNT(*) FROM offer WHERE id = ?", offerId)).isEqualTo(1);
+
+        // 켜면 손님의 요청·제안·선주문·가게를 지워요
+        seeder.seed(true);
+        assertThat(count(DemoSeeder.GUSEONG, "FRUIT_VEG")).isEqualTo(29);
+        assertThat(rows("SELECT COUNT(*) FROM offer WHERE id = ?", offerId)).isZero();
+        assertThat(rows("SELECT COUNT(*) FROM pre_order WHERE user_id = ?", guestResidentId)).isZero();
+        assertThat(rows("SELECT COUNT(*) FROM owner_shop WHERE shop_name = ?", "손님반찬")).isZero();
+        assertThat(rows("SELECT COUNT(*) FROM app_user WHERE id = ?", guestResidentId)).isEqualTo(1);
+        // 예시 데이터는 그대로예요
+        assertThat(count(DemoSeeder.GUSEONG, "SIDE_DISH")).isEqualTo(12);
+        assertThat(rows("SELECT COUNT(*) FROM owner_shop WHERE shop_name = ?", DemoSeeder.FAKE_SHOP)).isEqualTo(1);
+        assertThat(rows("SELECT COUNT(*) FROM pre_order p JOIN app_user u ON p.user_id = u.id WHERE u.nickname LIKE ?",
+                "예시주민%")).isEqualTo(16);
+    }
+
+    private JsonNode guest() throws Exception {
+        String body = mockMvc.perform(post("/api/v1/auth/guest"))
+                .andExpect(status().is2xxSuccessful())
+                .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+        return objectMapper.readTree(body);
+    }
+
+    private int rows(String sql, Object arg) {
+        return jdbc.queryForObject(sql, Integer.class, arg);
     }
 
     private JsonNode login(String role) throws Exception {

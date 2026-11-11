@@ -59,7 +59,7 @@ class DemoSeederUnitTest {
         when(empty.setParameter(anyString(), org.mockito.ArgumentMatchers.any())).thenReturn(empty);
         when(empty.getResultStream()).thenReturn(Stream.empty());
 
-        DemoSeeder seeder = new DemoSeeder(users, shops, requests, mock(DongLocator.class), em);
+        DemoSeeder seeder = new DemoSeeder(users, shops, requests, mock(DongLocator.class), em, false);
 
         assertThatThrownBy(() -> seeder.run(new DefaultApplicationArguments()))
                 .isInstanceOf(IllegalStateException.class)
