@@ -34,9 +34,13 @@ public final class OfferDtos {
     public record OfferSummary(Long id, OfferStatus status, long orderCount, int minOrders) {
     }
 
-    /** GET /owner/offers 한 줄. cancel·done 응답도 같은 모양. */
+    /**
+     * GET /owner/offers 한 줄. cancel·done 응답도 같은 모양.
+     * 가격·받는 날·받는 곳·설명은 사장님 "내 가게" 제안 카드에 보여 줘요. description 은 안 썼으면 null 이에요.
+     */
     public record OwnerOfferItem(
-            Long id, IdName dong, String title, long orderCount, int minOrders,
+            Long id, IdName dong, String title, String description, int price,
+            OffsetDateTime pickupAt, String pickupPlace, long orderCount, int minOrders,
             OfferStatus status, OffsetDateTime deadlineAt) {
     }
 
