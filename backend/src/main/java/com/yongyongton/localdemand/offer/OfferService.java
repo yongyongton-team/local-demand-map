@@ -237,7 +237,8 @@ public class OfferService {
     private OwnerOfferItem ownerItem(Offer o, long count) {
         Dong d = em.find(Dong.class, o.getDongId());
         IdName dong = d == null ? new IdName(o.getDongId(), null) : new IdName(d.getId(), d.getName());
-        return new OwnerOfferItem(o.getId(), dong, o.getTitle(), count, o.getMinOrders(),
+        return new OwnerOfferItem(o.getId(), dong, o.getTitle(), o.getDescription(), o.getPrice(),
+                KstTime.of(o.getPickupAt()), o.getPickupPlace(), count, o.getMinOrders(),
                 effectiveStatus(o, count), KstTime.of(o.getDeadlineAt()));
     }
 

@@ -1,6 +1,7 @@
 package com.yongyongton.localdemand.offer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.hasItem;
 import static org.hamcrest.Matchers.hasSize;
 import static org.hamcrest.Matchers.nullValue;
@@ -163,6 +164,10 @@ class OfferApiTest {
                 .andExpect(jsonPath("$[0].id").value(offerId))
                 .andExpect(jsonPath("$[0].dong.name").value("구성동"))
                 .andExpect(jsonPath("$[0].title").value("과일 꾸러미"))
+                .andExpect(jsonPath("$[0].description").value("제철 과일 4~5가지, 낱개 포장"))
+                .andExpect(jsonPath("$[0].price").value(20000))
+                .andExpect(jsonPath("$[0].pickupAt").value(endsWith("+09:00")))
+                .andExpect(jsonPath("$[0].pickupPlace").value("구성동 주민센터 앞"))
                 .andExpect(jsonPath("$[0].orderCount").value(0))
                 .andExpect(jsonPath("$[0].status").value("OPEN"));
 
